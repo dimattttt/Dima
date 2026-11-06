@@ -1,0 +1,4420 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<script src="https://telegram.org/js/telegram-web-app.js?64"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HTML-блокнот</title>
+
+<style>
+:root {
+  /* Layout: top bar, then editor | preview split; stacks on narrow or portrait screens; key bar sits above the keyboard on touch screens */
+  --bg: #eceef2;
+  --surface: #ffffff;
+  --surface-2: #f5f6f8;
+  --ink: #1a1e26;
+  --muted: #5d6676;
+  --line: #d8dce3;
+  --accent: #d2461a;
+  --accent-ink: #ffffff;
+  --accent-soft: #fbe7df;
+  --sel: rgba(210, 70, 26, .25);
+  --line-hl: rgba(20, 30, 50, .045);
+  --hit: rgba(255, 184, 0, .32);
+  --ok: #1f8a4c;
+  --warn: #a66300;
+  --err: #c4302b;
+  --s-tag: #b4321a; --s-attr: #7a4fb0; --s-str: #1d7a52; --s-com: #8a93a1; --s-kw: #1f5fbf;
+  --s-num: #a2580b; --s-punc: #687183; --s-prop: #1f5fbf; --s-fn: #7a4fb0;
+  --font-ui: "Onest", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-code: "JetBrains Mono", ui-monospace, "SF Mono", SFMono-Regular, Menlo, "Roboto Mono", Consolas, monospace;
+  --code-size: 16px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1014; --surface: #171a20; --surface-2: #1e222a; --ink: #e6e9ee; --muted: #8e97a6;
+    --line: #2b3039; --accent: #ff6d38; --accent-ink: #1b0c05; --accent-soft: #3a2017;
+    --sel: rgba(255, 109, 56, .32); --line-hl: rgba(255, 255, 255, .05); --hit: rgba(255, 196, 0, .25);
+    --ok: #4cc27f; --warn: #e3a33c; --err: #ff6b63;
+    --s-tag: #ff8b66; --s-attr: #c6a0f5; --s-str: #8ed8a8; --s-com: #6c7584; --s-kw: #80b3ff;
+    --s-num: #f0b56c; --s-punc: #8e97a6; --s-prop: #80b3ff; --s-fn: #c6a0f5;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1014; --surface: #171a20; --surface-2: #1e222a; --ink: #e6e9ee; --muted: #8e97a6;
+  --line: #2b3039; --accent: #ff6d38; --accent-ink: #1b0c05; --accent-soft: #3a2017;
+  --sel: rgba(255, 109, 56, .32); --line-hl: rgba(255, 255, 255, .05); --hit: rgba(255, 196, 0, .25);
+  --ok: #4cc27f; --warn: #e3a33c; --err: #ff6b63;
+  --s-tag: #ff8b66; --s-attr: #c6a0f5; --s-str: #8ed8a8; --s-com: #6c7584; --s-kw: #80b3ff;
+  --s-num: #f0b56c; --s-punc: #8e97a6; --s-prop: #80b3ff; --s-fn: #c6a0f5;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--bg); color: var(--ink);
+  font-family: var(--font-ui); font-size: 15px; line-height: 1.4;
+  overflow: hidden; overscroll-behavior: none; -webkit-text-size-adjust: 100%;
+}
+button { font: inherit; color: inherit; -webkit-tap-highlight-color: transparent; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.vh { position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; opacity: 0; }
+.spacer { flex: 1 1 auto; }
+
+#app {
+  position: fixed; left: 0; right: 0; top: var(--app-top, 0px); height: var(--app-h, 100%);
+  display: flex; flex-direction: column;
+  padding-bottom: var(--tg-safe-area-inset-bottom, 0px);
+}
+.kb #app { padding-bottom: 0; }
+
+/* Top bar */
+.topbar {
+  display: flex; align-items: center; gap: 8px; min-height: 54px; flex: none;
+  padding: calc(8px + var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px)) 12px 8px;
+  background: var(--surface); border-bottom: 1px solid var(--line);
+}
+.brand { display: flex; align-items: center; gap: 8px; font-weight: 700; letter-spacing: -0.01em; white-space: nowrap; }
+.brand-mark {
+  width: 26px; height: 26px; border-radius: 7px; background: var(--accent); color: var(--accent-ink);
+  display: grid; place-items: center; font: 600 11px var(--font-code); letter-spacing: -0.04em;
+}
+.tg .brand { display: none; }
+.proj-btn {
+  display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 34vw;
+  min-height: 36px; padding: 0 10px; border: 1px solid var(--line); border-radius: 9px;
+  background: var(--surface-2); cursor: pointer;
+}
+.proj-btn span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.proj-btn .chev { color: var(--muted); font-size: 12px; }
+.status { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+.status::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+.status[data-state="saved"]::before { background: var(--ok); }
+.status[data-state="saving"]::before, .status[data-state="connecting"]::before { background: var(--warn); }
+.status[data-state="offline"]::before { background: var(--err); }
+
+.seg { display: inline-flex; padding: 2px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); flex: none; }
+.seg button {
+  border: 0; background: transparent; color: var(--muted); font-weight: 500; font-size: 14px;
+  min-height: 32px; padding: 0 11px; border-radius: 8px; cursor: pointer; white-space: nowrap;
+}
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.1), 0 0 0 1px var(--line); }
+.seg.small button { font: 500 12.5px var(--font-code); min-height: 28px; padding: 0 8px; }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 36px; padding: 0 12px;
+  border: 1px solid var(--line); border-radius: 9px; background: var(--surface); color: var(--ink);
+  font: 500 14px/1 var(--font-ui); cursor: pointer; white-space: nowrap; text-decoration: none; flex: none;
+}
+.btn:hover { background: var(--surface-2); }
+.btn-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn-primary:hover { background: var(--accent); filter: brightness(1.06); }
+.btn.icon { width: 36px; padding: 0; font-size: 20px; letter-spacing: 0.05em; }
+.btn.sm { min-height: 32px; padding: 0 10px; font-size: 13px; }
+.btn.ghost { border-color: transparent; background: transparent; }
+.btn.ghost:hover { background: var(--surface-2); }
+.btn.danger { background: var(--err); border-color: var(--err); color: #fff; }
+.badge {
+  display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px;
+  background: var(--muted); color: var(--surface); font: 600 11px var(--font-ui); font-variant-numeric: tabular-nums;
+}
+.badge.err { background: var(--err); color: #fff; }
+
+/* Tip */
+.tip {
+  display: flex; align-items: center; gap: 10px; padding: 8px 10px 8px 14px; flex: none;
+  background: var(--accent-soft); border-bottom: 1px solid var(--line); font-size: 13.5px;
+}
+.tip p { margin: 0; flex: 1; }
+.tip code, .tip kbd, .sheet-note code {
+  font-family: var(--font-code); font-size: 12.5px; padding: 1px 5px; border-radius: 5px;
+  background: var(--surface); border: 1px solid var(--line); white-space: nowrap;
+}
+
+/* Main split */
+#main { flex: 1 1 auto; display: flex; min-height: 0; }
+#main.stack { flex-direction: column; }
+.pane { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--surface); }
+#editorPane { flex: 0 0 50%; }
+#previewPane { flex: 1 1 0; }
+.divider { flex: 0 0 9px; background: var(--bg); cursor: col-resize; touch-action: none; position: relative; }
+.divider::after {
+  content: ""; position: absolute; left: 50%; top: 50%; width: 3px; height: 36px; border-radius: 2px;
+  background: var(--line); transform: translate(-50%, -50%);
+}
+#main.stack .divider { cursor: row-resize; }
+#main.stack .divider::after { width: 36px; height: 3px; }
+.divider:hover::after, #main.dragging .divider::after { background: var(--accent); }
+#main.dragging iframe { pointer-events: none; }
+#main[data-view="code"] #previewPane, #main[data-view="code"] .divider,
+#main[data-view="preview"] #editorPane, #main[data-view="preview"] .divider { display: none; }
+#main[data-view="code"] #editorPane { flex: 1 1 auto; }
+
+/* Editor */
+.tabs {
+  display: flex; align-items: stretch; gap: 2px; padding: 0 8px; min-height: 40px;
+  border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; flex: none; order: 0;
+}
+.tabs::-webkit-scrollbar { display: none; }
+.tabs [role="tab"] {
+  border: 0; background: none; padding: 0 12px; cursor: pointer; white-space: nowrap;
+  font: 500 13.5px var(--font-code); color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px;
+}
+.tabs [role="tab"][aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.pos { align-self: center; padding: 0 4px; font: 12px var(--font-code); color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+.findbar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 8px; flex: none; order: 1;
+  background: var(--surface-2); border-bottom: 1px solid var(--line);
+}
+.findbar input {
+  flex: 1 1 150px; min-width: 0; height: 34px; padding: 0 10px; border-radius: 8px;
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: 400 16px var(--font-ui);
+}
+.findcount { min-width: 46px; text-align: center; font: 12px var(--font-code); color: var(--muted); font-variant-numeric: tabular-nums; }
+.findrow { display: flex; align-items: center; gap: 6px; flex: 1 1 260px; min-width: 0; }
+
+.keybar {
+  display: flex; gap: 5px; padding: 6px 8px; overflow-x: auto; flex: none; order: 2;
+  background: var(--surface-2); border-bottom: 1px solid var(--line); scrollbar-width: none;
+  -webkit-user-select: none; user-select: none;
+}
+.keybar::-webkit-scrollbar { display: none; }
+.keybar button {
+  flex: none; min-width: 38px; height: 36px; padding: 0 8px; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+  font: 500 16px var(--font-code); touch-action: manipulation;
+}
+.keybar button.acc { color: var(--accent); font-weight: 600; }
+.keybar button.word { font: 600 13px var(--font-ui); }
+.keybar button:active { background: var(--accent-soft); }
+.keybar .sep { flex: none; width: 1px; background: var(--line); margin: 4px 2px; }
+
+.editor { position: relative; flex: 1 1 auto; min-height: 0; order: 3; --digits: 2; --gutter: calc(var(--digits) * 1ch + 26px); }
+.editor:focus-within { box-shadow: inset 0 2px 0 var(--accent); }
+.editor textarea, .editor pre {
+  position: absolute; inset: 0; margin: 0; padding: 12px 14px 14px var(--gutter); border: 0;
+  font-family: var(--font-code); font-size: var(--code-size); line-height: 1.55; font-weight: 400; font-style: normal;
+  letter-spacing: 0; font-variant-ligatures: none; font-feature-settings: "liga" 0, "calt" 0;
+  tab-size: 2; -moz-tab-size: 2;
+  white-space: pre-wrap; word-wrap: break-word; overflow-wrap: break-word; word-break: normal;
+  text-align: left; text-indent: 0; text-transform: none;
+}
+.editor pre {
+  pointer-events: none; overflow: hidden; color: var(--ink);
+  background: linear-gradient(to right, var(--surface-2) calc(var(--gutter) - 8px), transparent calc(var(--gutter) - 8px));
+}
+.editor pre code { display: block; font: inherit; counter-reset: ln; }
+.ln { display: block; position: relative; }
+.ln::before {
+  content: counter(ln); counter-increment: ln; position: absolute; right: 100%; top: 0;
+  width: var(--gutter); padding-right: 16px; text-align: right; color: var(--s-com); opacity: .75;
+}
+.ln.cur { background: var(--line-hl); }
+.ln.cur::before { color: var(--ink); opacity: 1; }
+.ln.hit { background: var(--hit); }
+.editor textarea {
+  z-index: 1; resize: none; outline: none; overflow: auto; background: transparent;
+  color: transparent; -webkit-text-fill-color: transparent; caret-color: var(--accent);
+  scrollbar-width: none;
+}
+.editor textarea::-webkit-scrollbar { display: none; width: 0; height: 0; }
+.editor textarea::selection { background: var(--sel); }
+
+.token.comment, .token.prolog, .token.doctype, .token.cdata { color: var(--s-com); }
+.token.punctuation, .token.operator { color: var(--s-punc); }
+.token.tag, .token.selector, .token.important { color: var(--s-tag); }
+.token.attr-name, .token.function, .token.class-name { color: var(--s-fn); }
+.token.attr-value, .token.attr-value .token.punctuation, .token.string, .token.url, .token.template-string { color: var(--s-str); }
+.token.property, .token.keyword, .token.boolean, .token.atrule, .token.rule { color: var(--s-kw); }
+.token.number, .token.entity, .token.regex, .token.unit, .token.hexcode { color: var(--s-num); }
+.token.interpolation { color: var(--ink); }
+
+/* Preview */
+.preview-head {
+  display: flex; align-items: center; gap: 8px; padding: 5px 8px; min-height: 40px; flex: none;
+  background: var(--surface-2); border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none;
+}
+.preview-head::-webkit-scrollbar { display: none; }
+.wread { font: 12px var(--font-code); color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.switch { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); white-space: nowrap; cursor: pointer; }
+.switch input { width: 16px; height: 16px; accent-color: var(--accent); margin: 0; }
+.stage { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; background: var(--bg); }
+.frame-box { position: absolute; left: 0; top: 0; width: 100%; height: 100%; transform-origin: top center; background: #fff; }
+.stage.framed .frame-box { border-radius: 10px; overflow: hidden; box-shadow: 0 0 0 1px var(--line), 0 10px 28px rgba(0,0,0,.14); }
+.frame-box iframe { display: block; width: 100%; height: 100%; border: 0; background: #fff; }
+.stale {
+  position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 2;
+  padding: 7px 14px; border-radius: 999px; background: var(--ink); color: var(--surface); font-size: 13px; white-space: nowrap;
+}
+
+.console { display: flex; flex-direction: column; flex: 0 0 34%; min-height: 120px; border-top: 1px solid var(--line); background: var(--surface); }
+.console-head { display: flex; align-items: center; gap: 6px; padding: 4px 6px 4px 12px; border-bottom: 1px solid var(--line); font-size: 13px; }
+.console-list { flex: 1; overflow: auto; font: 13px/1.5 var(--font-code); }
+.log { padding: 4px 12px; border-bottom: 1px solid var(--line); white-space: pre-wrap; word-break: break-word; }
+.log.warn { color: var(--warn); }
+.log.error { color: var(--err); }
+.log.info { color: var(--muted); }
+.console-empty { padding: 10px 12px; color: var(--muted); font-size: 13px; }
+
+/* Sheets */
+.scrim { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(8, 10, 14, .48); }
+.sheet {
+  display: flex; flex-direction: column; width: min(560px, 100%); max-height: 100%;
+  background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 14px;
+  box-shadow: 0 24px 60px rgba(0,0,0,.3);
+}
+.sheet-head { display: flex; align-items: center; gap: 8px; padding: 10px 10px 10px 18px; border-bottom: 1px solid var(--line); }
+.sheet-head h2 { margin: 0; flex: 1; font-size: 17px; font-weight: 600; text-wrap: balance; }
+.sheet-body { display: flex; flex-direction: column; gap: 2px; padding: 8px; overflow: auto; }
+.sheet-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 12px; border-top: 1px solid var(--line); }
+.row {
+  display: flex; align-items: center; gap: 12px; width: 100%; padding: 11px 12px; border: 0; border-radius: 10px;
+  background: none; color: var(--ink); text-align: left; cursor: pointer; font: inherit;
+}
+.row:hover { background: var(--surface-2); }
+.row.current, .row[aria-pressed="true"] { background: var(--accent-soft); }
+.row.static { cursor: default; }
+.row.static:hover { background: none; }
+.row-main { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.row-title { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row-sub { font-size: 12.5px; color: var(--muted); }
+.row.danger .row-title { color: var(--err); }
+.row-ico { flex: none; width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; background: var(--surface-2); border: 1px solid var(--line); font: 600 12px var(--font-code); color: var(--muted); }
+.sheet-note { margin: 6px 12px 10px; font-size: 13px; color: var(--muted); line-height: 1.5; }
+.sheet-actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 6px 12px 10px; }
+.field { display: flex; flex-direction: column; gap: 6px; padding: 8px 12px; }
+.field label { font-size: 13px; color: var(--muted); }
+.field input {
+  font: 400 16px var(--font-ui); padding: 10px 12px; border-radius: 9px;
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+}
+.group-title { margin: 12px 12px 4px; font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 2px 12px 6px; }
+.chip {
+  padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface-2); color: var(--ink);
+  font: 500 13.5px var(--font-code); cursor: pointer;
+}
+.chip:hover, .chip:active { border-color: var(--accent); }
+.fontctl { display: inline-flex; align-items: center; gap: 6px; }
+.fontctl output { min-width: 42px; text-align: center; font: 13px var(--font-code); font-variant-numeric: tabular-nums; }
+.imgs { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; padding: 4px 12px 12px; }
+.img-card { display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); }
+.img-card img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: var(--bg); }
+.img-meta { display: flex; flex-direction: column; gap: 6px; padding: 8px; }
+.img-name { font: 12.5px var(--font-code); word-break: break-all; }
+.img-size { font-size: 12px; color: var(--muted); }
+.img-btns { display: flex; gap: 6px; }
+.empty { margin: 4px 12px 12px; color: var(--muted); font-size: 14px; }
+
+.toast {
+  position: fixed; left: 50%; bottom: calc(20px + var(--tg-safe-area-inset-bottom, 0px)); z-index: 60; transform: translateX(-50%);
+  max-width: calc(100% - 32px); padding: 10px 16px; border-radius: 10px;
+  background: var(--ink); color: var(--surface); font-size: 14px; box-shadow: 0 8px 24px rgba(0,0,0,.22);
+}
+
+/* Touch screens: key bar right above the keyboard, bigger keys */
+@media (pointer: coarse) {
+  .keybar { order: 4; border-bottom: 0; border-top: 1px solid var(--line); }
+  .keybar button { height: 40px; min-width: 42px; font-size: 17px; }
+}
+@media (max-width: 760px) {
+  .brand-name { display: none; }
+  .status { font-size: 0; gap: 0; }
+  #runBtn .lbl { display: none; }
+  #runBtn { width: 36px; padding: 0; }
+  .proj-btn { max-width: 30vw; }
+  .seg button { padding: 0 9px; }
+}
+@media (max-width: 600px) {
+  .scrim { align-items: flex-end; padding: 0; }
+  .sheet { width: 100%; max-height: 90%; border-radius: 16px 16px 0 0; border-bottom: 0; padding-bottom: var(--tg-safe-area-inset-bottom, 0px); }
+}
+@media (max-width: 480px) {
+  .pos { display: none; }
+}
+@media (max-width: 420px) {
+  .topbar { gap: 6px; padding-left: 8px; padding-right: 8px; }
+  .brand { display: none; }
+  .proj-btn { max-width: 28vw; }
+}
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
+}
+</style>
+<script>window.Prism = window.Prism || {}; window.Prism.manual = true;</script>
+<script>
+/* Prism 1.29.0, MIT License, https://prismjs.com */
+
+/* **********************************************
+     Begin prism-core.js
+********************************************** */
+
+/// <reference lib="WebWorker"/>
+
+var _self = (typeof window !== 'undefined')
+	? window   // if in browser
+	: (
+		(typeof WorkerGlobalScope !== 'undefined' && self instanceof WorkerGlobalScope)
+			? self // if in worker
+			: {}   // if in node js
+	);
+
+/**
+ * Prism: Lightweight, robust, elegant syntax highlighting
+ *
+ * @license MIT <https://opensource.org/licenses/MIT>
+ * @author Lea Verou <https://lea.verou.me>
+ * @namespace
+ * @public
+ */
+var Prism = (function (_self) {
+
+	// Private helper vars
+	var lang = /(?:^|\s)lang(?:uage)?-([\w-]+)(?=\s|$)/i;
+	var uniqueId = 0;
+
+	// The grammar object for plaintext
+	var plainTextGrammar = {};
+
+
+	var _ = {
+		/**
+		 * By default, Prism will attempt to highlight all code elements (by calling {@link Prism.highlightAll}) on the
+		 * current page after the page finished loading. This might be a problem if e.g. you wanted to asynchronously load
+		 * additional languages or plugins yourself.
+		 *
+		 * By setting this value to `true`, Prism will not automatically highlight all code elements on the page.
+		 *
+		 * You obviously have to change this value before the automatic highlighting started. To do this, you can add an
+		 * empty Prism object into the global scope before loading the Prism script like this:
+		 *
+		 * ```js
+		 * window.Prism = window.Prism || {};
+		 * Prism.manual = true;
+		 * // add a new <script> to load Prism's script
+		 * ```
+		 *
+		 * @default false
+		 * @type {boolean}
+		 * @memberof Prism
+		 * @public
+		 */
+		manual: _self.Prism && _self.Prism.manual,
+		/**
+		 * By default, if Prism is in a web worker, it assumes that it is in a worker it created itself, so it uses
+		 * `addEventListener` to communicate with its parent instance. However, if you're using Prism manually in your
+		 * own worker, you don't want it to do this.
+		 *
+		 * By setting this value to `true`, Prism will not add its own listeners to the worker.
+		 *
+		 * You obviously have to change this value before Prism executes. To do this, you can add an
+		 * empty Prism object into the global scope before loading the Prism script like this:
+		 *
+		 * ```js
+		 * window.Prism = window.Prism || {};
+		 * Prism.disableWorkerMessageHandler = true;
+		 * // Load Prism's script
+		 * ```
+		 *
+		 * @default false
+		 * @type {boolean}
+		 * @memberof Prism
+		 * @public
+		 */
+		disableWorkerMessageHandler: _self.Prism && _self.Prism.disableWorkerMessageHandler,
+
+		/**
+		 * A namespace for utility methods.
+		 *
+		 * All function in this namespace that are not explicitly marked as _public_ are for __internal use only__ and may
+		 * change or disappear at any time.
+		 *
+		 * @namespace
+		 * @memberof Prism
+		 */
+		util: {
+			encode: function encode(tokens) {
+				if (tokens instanceof Token) {
+					return new Token(tokens.type, encode(tokens.content), tokens.alias);
+				} else if (Array.isArray(tokens)) {
+					return tokens.map(encode);
+				} else {
+					return tokens.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/\u00a0/g, ' ');
+				}
+			},
+
+			/**
+			 * Returns the name of the type of the given value.
+			 *
+			 * @param {any} o
+			 * @returns {string}
+			 * @example
+			 * type(null)      === 'Null'
+			 * type(undefined) === 'Undefined'
+			 * type(123)       === 'Number'
+			 * type('foo')     === 'String'
+			 * type(true)      === 'Boolean'
+			 * type([1, 2])    === 'Array'
+			 * type({})        === 'Object'
+			 * type(String)    === 'Function'
+			 * type(/abc+/)    === 'RegExp'
+			 */
+			type: function (o) {
+				return Object.prototype.toString.call(o).slice(8, -1);
+			},
+
+			/**
+			 * Returns a unique number for the given object. Later calls will still return the same number.
+			 *
+			 * @param {Object} obj
+			 * @returns {number}
+			 */
+			objId: function (obj) {
+				if (!obj['__id']) {
+					Object.defineProperty(obj, '__id', { value: ++uniqueId });
+				}
+				return obj['__id'];
+			},
+
+			/**
+			 * Creates a deep clone of the given object.
+			 *
+			 * The main intended use of this function is to clone language definitions.
+			 *
+			 * @param {T} o
+			 * @param {Record<number, any>} [visited]
+			 * @returns {T}
+			 * @template T
+			 */
+			clone: function deepClone(o, visited) {
+				visited = visited || {};
+
+				var clone; var id;
+				switch (_.util.type(o)) {
+					case 'Object':
+						id = _.util.objId(o);
+						if (visited[id]) {
+							return visited[id];
+						}
+						clone = /** @type {Record<string, any>} */ ({});
+						visited[id] = clone;
+
+						for (var key in o) {
+							if (o.hasOwnProperty(key)) {
+								clone[key] = deepClone(o[key], visited);
+							}
+						}
+
+						return /** @type {any} */ (clone);
+
+					case 'Array':
+						id = _.util.objId(o);
+						if (visited[id]) {
+							return visited[id];
+						}
+						clone = [];
+						visited[id] = clone;
+
+						(/** @type {Array} */(/** @type {any} */(o))).forEach(function (v, i) {
+							clone[i] = deepClone(v, visited);
+						});
+
+						return /** @type {any} */ (clone);
+
+					default:
+						return o;
+				}
+			},
+
+			/**
+			 * Returns the Prism language of the given element set by a `language-xxxx` or `lang-xxxx` class.
+			 *
+			 * If no language is set for the element or the element is `null` or `undefined`, `none` will be returned.
+			 *
+			 * @param {Element} element
+			 * @returns {string}
+			 */
+			getLanguage: function (element) {
+				while (element) {
+					var m = lang.exec(element.className);
+					if (m) {
+						return m[1].toLowerCase();
+					}
+					element = element.parentElement;
+				}
+				return 'none';
+			},
+
+			/**
+			 * Sets the Prism `language-xxxx` class of the given element.
+			 *
+			 * @param {Element} element
+			 * @param {string} language
+			 * @returns {void}
+			 */
+			setLanguage: function (element, language) {
+				// remove all `language-xxxx` classes
+				// (this might leave behind a leading space)
+				element.className = element.className.replace(RegExp(lang, 'gi'), '');
+
+				// add the new `language-xxxx` class
+				// (using `classList` will automatically clean up spaces for us)
+				element.classList.add('language-' + language);
+			},
+
+			/**
+			 * Returns the script element that is currently executing.
+			 *
+			 * This does __not__ work for line script element.
+			 *
+			 * @returns {HTMLScriptElement | null}
+			 */
+			currentScript: function () {
+				if (typeof document === 'undefined') {
+					return null;
+				}
+				if ('currentScript' in document && 1 < 2 /* hack to trip TS' flow analysis */) {
+					return /** @type {any} */ (document.currentScript);
+				}
+
+				// IE11 workaround
+				// we'll get the src of the current script by parsing IE11's error stack trace
+				// this will not work for inline scripts
+
+				try {
+					throw new Error();
+				} catch (err) {
+					// Get file src url from stack. Specifically works with the format of stack traces in IE.
+					// A stack will look like this:
+					//
+					// Error
+					//    at _.util.currentScript (http://localhost/components/prism-core.js:119:5)
+					//    at Global code (http://localhost/components/prism-core.js:606:1)
+
+					var src = (/at [^(\r\n]*\((.*):[^:]+:[^:]+\)$/i.exec(err.stack) || [])[1];
+					if (src) {
+						var scripts = document.getElementsByTagName('script');
+						for (var i in scripts) {
+							if (scripts[i].src == src) {
+								return scripts[i];
+							}
+						}
+					}
+					return null;
+				}
+			},
+
+			/**
+			 * Returns whether a given class is active for `element`.
+			 *
+			 * The class can be activated if `element` or one of its ancestors has the given class and it can be deactivated
+			 * if `element` or one of its ancestors has the negated version of the given class. The _negated version_ of the
+			 * given class is just the given class with a `no-` prefix.
+			 *
+			 * Whether the class is active is determined by the closest ancestor of `element` (where `element` itself is
+			 * closest ancestor) that has the given class or the negated version of it. If neither `element` nor any of its
+			 * ancestors have the given class or the negated version of it, then the default activation will be returned.
+			 *
+			 * In the paradoxical situation where the closest ancestor contains __both__ the given class and the negated
+			 * version of it, the class is considered active.
+			 *
+			 * @param {Element} element
+			 * @param {string} className
+			 * @param {boolean} [defaultActivation=false]
+			 * @returns {boolean}
+			 */
+			isActive: function (element, className, defaultActivation) {
+				var no = 'no-' + className;
+
+				while (element) {
+					var classList = element.classList;
+					if (classList.contains(className)) {
+						return true;
+					}
+					if (classList.contains(no)) {
+						return false;
+					}
+					element = element.parentElement;
+				}
+				return !!defaultActivation;
+			}
+		},
+
+		/**
+		 * This namespace contains all currently loaded languages and the some helper functions to create and modify languages.
+		 *
+		 * @namespace
+		 * @memberof Prism
+		 * @public
+		 */
+		languages: {
+			/**
+			 * The grammar for plain, unformatted text.
+			 */
+			plain: plainTextGrammar,
+			plaintext: plainTextGrammar,
+			text: plainTextGrammar,
+			txt: plainTextGrammar,
+
+			/**
+			 * Creates a deep copy of the language with the given id and appends the given tokens.
+			 *
+			 * If a token in `redef` also appears in the copied language, then the existing token in the copied language
+			 * will be overwritten at its original position.
+			 *
+			 * ## Best practices
+			 *
+			 * Since the position of overwriting tokens (token in `redef` that overwrite tokens in the copied language)
+			 * doesn't matter, they can technically be in any order. However, this can be confusing to others that trying to
+			 * understand the language definition because, normally, the order of tokens matters in Prism grammars.
+			 *
+			 * Therefore, it is encouraged to order overwriting tokens according to the positions of the overwritten tokens.
+			 * Furthermore, all non-overwriting tokens should be placed after the overwriting ones.
+			 *
+			 * @param {string} id The id of the language to extend. This has to be a key in `Prism.languages`.
+			 * @param {Grammar} redef The new tokens to append.
+			 * @returns {Grammar} The new language created.
+			 * @public
+			 * @example
+			 * Prism.languages['css-with-colors'] = Prism.languages.extend('css', {
+			 *     // Prism.languages.css already has a 'comment' token, so this token will overwrite CSS' 'comment' token
+			 *     // at its original position
+			 *     'comment': { ... },
+			 *     // CSS doesn't have a 'color' token, so this token will be appended
+			 *     'color': /\b(?:red|green|blue)\b/
+			 * });
+			 */
+			extend: function (id, redef) {
+				var lang = _.util.clone(_.languages[id]);
+
+				for (var key in redef) {
+					lang[key] = redef[key];
+				}
+
+				return lang;
+			},
+
+			/**
+			 * Inserts tokens _before_ another token in a language definition or any other grammar.
+			 *
+			 * ## Usage
+			 *
+			 * This helper method makes it easy to modify existing languages. For example, the CSS language definition
+			 * not only defines CSS highlighting for CSS documents, but also needs to define highlighting for CSS embedded
+			 * in HTML through `<style>` elements. To do this, it needs to modify `Prism.languages.markup` and add the
+			 * appropriate tokens. However, `Prism.languages.markup` is a regular JavaScript object literal, so if you do
+			 * this:
+			 *
+			 * ```js
+			 * Prism.languages.markup.style = {
+			 *     // token
+			 * };
+			 * ```
+			 *
+			 * then the `style` token will be added (and processed) at the end. `insertBefore` allows you to insert tokens
+			 * before existing tokens. For the CSS example above, you would use it like this:
+			 *
+			 * ```js
+			 * Prism.languages.insertBefore('markup', 'cdata', {
+			 *     'style': {
+			 *         // token
+			 *     }
+			 * });
+			 * ```
+			 *
+			 * ## Special cases
+			 *
+			 * If the grammars of `inside` and `insert` have tokens with the same name, the tokens in `inside`'s grammar
+			 * will be ignored.
+			 *
+			 * This behavior can be used to insert tokens after `before`:
+			 *
+			 * ```js
+			 * Prism.languages.insertBefore('markup', 'comment', {
+			 *     'comment': Prism.languages.markup.comment,
+			 *     // tokens after 'comment'
+			 * });
+			 * ```
+			 *
+			 * ## Limitations
+			 *
+			 * The main problem `insertBefore` has to solve is iteration order. Since ES2015, the iteration order for object
+			 * properties is guaranteed to be the insertion order (except for integer keys) but some browsers behave
+			 * differently when keys are deleted and re-inserted. So `insertBefore` can't be implemented by temporarily
+			 * deleting properties which is necessary to insert at arbitrary positions.
+			 *
+			 * To solve this problem, `insertBefore` doesn't actually insert the given tokens into the target object.
+			 * Instead, it will create a new object and replace all references to the target object with the new one. This
+			 * can be done without temporarily deleting properties, so the iteration order is well-defined.
+			 *
+			 * However, only references that can be reached from `Prism.languages` or `insert` will be replaced. I.e. if
+			 * you hold the target object in a variable, then the value of the variable will not change.
+			 *
+			 * ```js
+			 * var oldMarkup = Prism.languages.markup;
+			 * var newMarkup = Prism.languages.insertBefore('markup', 'comment', { ... });
+			 *
+			 * assert(oldMarkup !== Prism.languages.markup);
+			 * assert(newMarkup === Prism.languages.markup);
+			 * ```
+			 *
+			 * @param {string} inside The property of `root` (e.g. a language id in `Prism.languages`) that contains the
+			 * object to be modified.
+			 * @param {string} before The key to insert before.
+			 * @param {Grammar} insert An object containing the key-value pairs to be inserted.
+			 * @param {Object<string, any>} [root] The object containing `inside`, i.e. the object that contains the
+			 * object to be modified.
+			 *
+			 * Defaults to `Prism.languages`.
+			 * @returns {Grammar} The new grammar object.
+			 * @public
+			 */
+			insertBefore: function (inside, before, insert, root) {
+				root = root || /** @type {any} */ (_.languages);
+				var grammar = root[inside];
+				/** @type {Grammar} */
+				var ret = {};
+
+				for (var token in grammar) {
+					if (grammar.hasOwnProperty(token)) {
+
+						if (token == before) {
+							for (var newToken in insert) {
+								if (insert.hasOwnProperty(newToken)) {
+									ret[newToken] = insert[newToken];
+								}
+							}
+						}
+
+						// Do not insert token which also occur in insert. See #1525
+						if (!insert.hasOwnProperty(token)) {
+							ret[token] = grammar[token];
+						}
+					}
+				}
+
+				var old = root[inside];
+				root[inside] = ret;
+
+				// Update references in other language definitions
+				_.languages.DFS(_.languages, function (key, value) {
+					if (value === old && key != inside) {
+						this[key] = ret;
+					}
+				});
+
+				return ret;
+			},
+
+			// Traverse a language definition with Depth First Search
+			DFS: function DFS(o, callback, type, visited) {
+				visited = visited || {};
+
+				var objId = _.util.objId;
+
+				for (var i in o) {
+					if (o.hasOwnProperty(i)) {
+						callback.call(o, i, o[i], type || i);
+
+						var property = o[i];
+						var propertyType = _.util.type(property);
+
+						if (propertyType === 'Object' && !visited[objId(property)]) {
+							visited[objId(property)] = true;
+							DFS(property, callback, null, visited);
+						} else if (propertyType === 'Array' && !visited[objId(property)]) {
+							visited[objId(property)] = true;
+							DFS(property, callback, i, visited);
+						}
+					}
+				}
+			}
+		},
+
+		plugins: {},
+
+		/**
+		 * This is the most high-level function in Prism’s API.
+		 * It fetches all the elements that have a `.language-xxxx` class and then calls {@link Prism.highlightElement} on
+		 * each one of them.
+		 *
+		 * This is equivalent to `Prism.highlightAllUnder(document, async, callback)`.
+		 *
+		 * @param {boolean} [async=false] Same as in {@link Prism.highlightAllUnder}.
+		 * @param {HighlightCallback} [callback] Same as in {@link Prism.highlightAllUnder}.
+		 * @memberof Prism
+		 * @public
+		 */
+		highlightAll: function (async, callback) {
+			_.highlightAllUnder(document, async, callback);
+		},
+
+		/**
+		 * Fetches all the descendants of `container` that have a `.language-xxxx` class and then calls
+		 * {@link Prism.highlightElement} on each one of them.
+		 *
+		 * The following hooks will be run:
+		 * 1. `before-highlightall`
+		 * 2. `before-all-elements-highlight`
+		 * 3. All hooks of {@link Prism.highlightElement} for each element.
+		 *
+		 * @param {ParentNode} container The root element, whose descendants that have a `.language-xxxx` class will be highlighted.
+		 * @param {boolean} [async=false] Whether each element is to be highlighted asynchronously using Web Workers.
+		 * @param {HighlightCallback} [callback] An optional callback to be invoked on each element after its highlighting is done.
+		 * @memberof Prism
+		 * @public
+		 */
+		highlightAllUnder: function (container, async, callback) {
+			var env = {
+				callback: callback,
+				container: container,
+				selector: 'code[class*="language-"], [class*="language-"] code, code[class*="lang-"], [class*="lang-"] code'
+			};
+
+			_.hooks.run('before-highlightall', env);
+
+			env.elements = Array.prototype.slice.apply(env.container.querySelectorAll(env.selector));
+
+			_.hooks.run('before-all-elements-highlight', env);
+
+			for (var i = 0, element; (element = env.elements[i++]);) {
+				_.highlightElement(element, async === true, env.callback);
+			}
+		},
+
+		/**
+		 * Highlights the code inside a single element.
+		 *
+		 * The following hooks will be run:
+		 * 1. `before-sanity-check`
+		 * 2. `before-highlight`
+		 * 3. All hooks of {@link Prism.highlight}. These hooks will be run by an asynchronous worker if `async` is `true`.
+		 * 4. `before-insert`
+		 * 5. `after-highlight`
+		 * 6. `complete`
+		 *
+		 * Some the above hooks will be skipped if the element doesn't contain any text or there is no grammar loaded for
+		 * the element's language.
+		 *
+		 * @param {Element} element The element containing the code.
+		 * It must have a class of `language-xxxx` to be processed, where `xxxx` is a valid language identifier.
+		 * @param {boolean} [async=false] Whether the element is to be highlighted asynchronously using Web Workers
+		 * to improve performance and avoid blocking the UI when highlighting very large chunks of code. This option is
+		 * [disabled by default](https://prismjs.com/faq.html#why-is-asynchronous-highlighting-disabled-by-default).
+		 *
+		 * Note: All language definitions required to highlight the code must be included in the main `prism.js` file for
+		 * asynchronous highlighting to work. You can build your own bundle on the
+		 * [Download page](https://prismjs.com/download.html).
+		 * @param {HighlightCallback} [callback] An optional callback to be invoked after the highlighting is done.
+		 * Mostly useful when `async` is `true`, since in that case, the highlighting is done asynchronously.
+		 * @memberof Prism
+		 * @public
+		 */
+		highlightElement: function (element, async, callback) {
+			// Find language
+			var language = _.util.getLanguage(element);
+			var grammar = _.languages[language];
+
+			// Set language on the element, if not present
+			_.util.setLanguage(element, language);
+
+			// Set language on the parent, for styling
+			var parent = element.parentElement;
+			if (parent && parent.nodeName.toLowerCase() === 'pre') {
+				_.util.setLanguage(parent, language);
+			}
+
+			var code = element.textContent;
+
+			var env = {
+				element: element,
+				language: language,
+				grammar: grammar,
+				code: code
+			};
+
+			function insertHighlightedCode(highlightedCode) {
+				env.highlightedCode = highlightedCode;
+
+				_.hooks.run('before-insert', env);
+
+				env.element.innerHTML = env.highlightedCode;
+
+				_.hooks.run('after-highlight', env);
+				_.hooks.run('complete', env);
+				callback && callback.call(env.element);
+			}
+
+			_.hooks.run('before-sanity-check', env);
+
+			// plugins may change/add the parent/element
+			parent = env.element.parentElement;
+			if (parent && parent.nodeName.toLowerCase() === 'pre' && !parent.hasAttribute('tabindex')) {
+				parent.setAttribute('tabindex', '0');
+			}
+
+			if (!env.code) {
+				_.hooks.run('complete', env);
+				callback && callback.call(env.element);
+				return;
+			}
+
+			_.hooks.run('before-highlight', env);
+
+			if (!env.grammar) {
+				insertHighlightedCode(_.util.encode(env.code));
+				return;
+			}
+
+			if (async && _self.Worker) {
+				var worker = new Worker(_.filename);
+
+				worker.onmessage = function (evt) {
+					insertHighlightedCode(evt.data);
+				};
+
+				worker.postMessage(JSON.stringify({
+					language: env.language,
+					code: env.code,
+					immediateClose: true
+				}));
+			} else {
+				insertHighlightedCode(_.highlight(env.code, env.grammar, env.language));
+			}
+		},
+
+		/**
+		 * Low-level function, only use if you know what you’re doing. It accepts a string of text as input
+		 * and the language definitions to use, and returns a string with the HTML produced.
+		 *
+		 * The following hooks will be run:
+		 * 1. `before-tokenize`
+		 * 2. `after-tokenize`
+		 * 3. `wrap`: On each {@link Token}.
+		 *
+		 * @param {string} text A string with the code to be highlighted.
+		 * @param {Grammar} grammar An object containing the tokens to use.
+		 *
+		 * Usually a language definition like `Prism.languages.markup`.
+		 * @param {string} language The name of the language definition passed to `grammar`.
+		 * @returns {string} The highlighted HTML.
+		 * @memberof Prism
+		 * @public
+		 * @example
+		 * Prism.highlight('var foo = true;', Prism.languages.javascript, 'javascript');
+		 */
+		highlight: function (text, grammar, language) {
+			var env = {
+				code: text,
+				grammar: grammar,
+				language: language
+			};
+			_.hooks.run('before-tokenize', env);
+			if (!env.grammar) {
+				throw new Error('The language "' + env.language + '" has no grammar.');
+			}
+			env.tokens = _.tokenize(env.code, env.grammar);
+			_.hooks.run('after-tokenize', env);
+			return Token.stringify(_.util.encode(env.tokens), env.language);
+		},
+
+		/**
+		 * This is the heart of Prism, and the most low-level function you can use. It accepts a string of text as input
+		 * and the language definitions to use, and returns an array with the tokenized code.
+		 *
+		 * When the language definition includes nested tokens, the function is called recursively on each of these tokens.
+		 *
+		 * This method could be useful in other contexts as well, as a very crude parser.
+		 *
+		 * @param {string} text A string with the code to be highlighted.
+		 * @param {Grammar} grammar An object containing the tokens to use.
+		 *
+		 * Usually a language definition like `Prism.languages.markup`.
+		 * @returns {TokenStream} An array of strings and tokens, a token stream.
+		 * @memberof Prism
+		 * @public
+		 * @example
+		 * let code = `var foo = 0;`;
+		 * let tokens = Prism.tokenize(code, Prism.languages.javascript);
+		 * tokens.forEach(token => {
+		 *     if (token instanceof Prism.Token && token.type === 'number') {
+		 *         console.log(`Found numeric literal: ${token.content}`);
+		 *     }
+		 * });
+		 */
+		tokenize: function (text, grammar) {
+			var rest = grammar.rest;
+			if (rest) {
+				for (var token in rest) {
+					grammar[token] = rest[token];
+				}
+
+				delete grammar.rest;
+			}
+
+			var tokenList = new LinkedList();
+			addAfter(tokenList, tokenList.head, text);
+
+			matchGrammar(text, tokenList, grammar, tokenList.head, 0);
+
+			return toArray(tokenList);
+		},
+
+		/**
+		 * @namespace
+		 * @memberof Prism
+		 * @public
+		 */
+		hooks: {
+			all: {},
+
+			/**
+			 * Adds the given callback to the list of callbacks for the given hook.
+			 *
+			 * The callback will be invoked when the hook it is registered for is run.
+			 * Hooks are usually directly run by a highlight function but you can also run hooks yourself.
+			 *
+			 * One callback function can be registered to multiple hooks and the same hook multiple times.
+			 *
+			 * @param {string} name The name of the hook.
+			 * @param {HookCallback} callback The callback function which is given environment variables.
+			 * @public
+			 */
+			add: function (name, callback) {
+				var hooks = _.hooks.all;
+
+				hooks[name] = hooks[name] || [];
+
+				hooks[name].push(callback);
+			},
+
+			/**
+			 * Runs a hook invoking all registered callbacks with the given environment variables.
+			 *
+			 * Callbacks will be invoked synchronously and in the order in which they were registered.
+			 *
+			 * @param {string} name The name of the hook.
+			 * @param {Object<string, any>} env The environment variables of the hook passed to all callbacks registered.
+			 * @public
+			 */
+			run: function (name, env) {
+				var callbacks = _.hooks.all[name];
+
+				if (!callbacks || !callbacks.length) {
+					return;
+				}
+
+				for (var i = 0, callback; (callback = callbacks[i++]);) {
+					callback(env);
+				}
+			}
+		},
+
+		Token: Token
+	};
+	_self.Prism = _;
+
+
+	// Typescript note:
+	// The following can be used to import the Token type in JSDoc:
+	//
+	//   @typedef {InstanceType<import("./prism-core")["Token"]>} Token
+
+	/**
+	 * Creates a new token.
+	 *
+	 * @param {string} type See {@link Token#type type}
+	 * @param {string | TokenStream} content See {@link Token#content content}
+	 * @param {string|string[]} [alias] The alias(es) of the token.
+	 * @param {string} [matchedStr=""] A copy of the full string this token was created from.
+	 * @class
+	 * @global
+	 * @public
+	 */
+	function Token(type, content, alias, matchedStr) {
+		/**
+		 * The type of the token.
+		 *
+		 * This is usually the key of a pattern in a {@link Grammar}.
+		 *
+		 * @type {string}
+		 * @see GrammarToken
+		 * @public
+		 */
+		this.type = type;
+		/**
+		 * The strings or tokens contained by this token.
+		 *
+		 * This will be a token stream if the pattern matched also defined an `inside` grammar.
+		 *
+		 * @type {string | TokenStream}
+		 * @public
+		 */
+		this.content = content;
+		/**
+		 * The alias(es) of the token.
+		 *
+		 * @type {string|string[]}
+		 * @see GrammarToken
+		 * @public
+		 */
+		this.alias = alias;
+		// Copy of the full string this token was created from
+		this.length = (matchedStr || '').length | 0;
+	}
+
+	/**
+	 * A token stream is an array of strings and {@link Token Token} objects.
+	 *
+	 * Token streams have to fulfill a few properties that are assumed by most functions (mostly internal ones) that process
+	 * them.
+	 *
+	 * 1. No adjacent strings.
+	 * 2. No empty strings.
+	 *
+	 *    The only exception here is the token stream that only contains the empty string and nothing else.
+	 *
+	 * @typedef {Array<string | Token>} TokenStream
+	 * @global
+	 * @public
+	 */
+
+	/**
+	 * Converts the given token or token stream to an HTML representation.
+	 *
+	 * The following hooks will be run:
+	 * 1. `wrap`: On each {@link Token}.
+	 *
+	 * @param {string | Token | TokenStream} o The token or token stream to be converted.
+	 * @param {string} language The name of current language.
+	 * @returns {string} The HTML representation of the token or token stream.
+	 * @memberof Token
+	 * @static
+	 */
+	Token.stringify = function stringify(o, language) {
+		if (typeof o == 'string') {
+			return o;
+		}
+		if (Array.isArray(o)) {
+			var s = '';
+			o.forEach(function (e) {
+				s += stringify(e, language);
+			});
+			return s;
+		}
+
+		var env = {
+			type: o.type,
+			content: stringify(o.content, language),
+			tag: 'span',
+			classes: ['token', o.type],
+			attributes: {},
+			language: language
+		};
+
+		var aliases = o.alias;
+		if (aliases) {
+			if (Array.isArray(aliases)) {
+				Array.prototype.push.apply(env.classes, aliases);
+			} else {
+				env.classes.push(aliases);
+			}
+		}
+
+		_.hooks.run('wrap', env);
+
+		var attributes = '';
+		for (var name in env.attributes) {
+			attributes += ' ' + name + '="' + (env.attributes[name] || '').replace(/"/g, '&quot;') + '"';
+		}
+
+		return '<' + env.tag + ' class="' + env.classes.join(' ') + '"' + attributes + '>' + env.content + '</' + env.tag + '>';
+	};
+
+	/**
+	 * @param {RegExp} pattern
+	 * @param {number} pos
+	 * @param {string} text
+	 * @param {boolean} lookbehind
+	 * @returns {RegExpExecArray | null}
+	 */
+	function matchPattern(pattern, pos, text, lookbehind) {
+		pattern.lastIndex = pos;
+		var match = pattern.exec(text);
+		if (match && lookbehind && match[1]) {
+			// change the match to remove the text matched by the Prism lookbehind group
+			var lookbehindLength = match[1].length;
+			match.index += lookbehindLength;
+			match[0] = match[0].slice(lookbehindLength);
+		}
+		return match;
+	}
+
+	/**
+	 * @param {string} text
+	 * @param {LinkedList<string | Token>} tokenList
+	 * @param {any} grammar
+	 * @param {LinkedListNode<string | Token>} startNode
+	 * @param {number} startPos
+	 * @param {RematchOptions} [rematch]
+	 * @returns {void}
+	 * @private
+	 *
+	 * @typedef RematchOptions
+	 * @property {string} cause
+	 * @property {number} reach
+	 */
+	function matchGrammar(text, tokenList, grammar, startNode, startPos, rematch) {
+		for (var token in grammar) {
+			if (!grammar.hasOwnProperty(token) || !grammar[token]) {
+				continue;
+			}
+
+			var patterns = grammar[token];
+			patterns = Array.isArray(patterns) ? patterns : [patterns];
+
+			for (var j = 0; j < patterns.length; ++j) {
+				if (rematch && rematch.cause == token + ',' + j) {
+					return;
+				}
+
+				var patternObj = patterns[j];
+				var inside = patternObj.inside;
+				var lookbehind = !!patternObj.lookbehind;
+				var greedy = !!patternObj.greedy;
+				var alias = patternObj.alias;
+
+				if (greedy && !patternObj.pattern.global) {
+					// Without the global flag, lastIndex won't work
+					var flags = patternObj.pattern.toString().match(/[imsuy]*$/)[0];
+					patternObj.pattern = RegExp(patternObj.pattern.source, flags + 'g');
+				}
+
+				/** @type {RegExp} */
+				var pattern = patternObj.pattern || patternObj;
+
+				for ( // iterate the token list and keep track of the current token/string position
+					var currentNode = startNode.next, pos = startPos;
+					currentNode !== tokenList.tail;
+					pos += currentNode.value.length, currentNode = currentNode.next
+				) {
+
+					if (rematch && pos >= rematch.reach) {
+						break;
+					}
+
+					var str = currentNode.value;
+
+					if (tokenList.length > text.length) {
+						// Something went terribly wrong, ABORT, ABORT!
+						return;
+					}
+
+					if (str instanceof Token) {
+						continue;
+					}
+
+					var removeCount = 1; // this is the to parameter of removeBetween
+					var match;
+
+					if (greedy) {
+						match = matchPattern(pattern, pos, text, lookbehind);
+						if (!match || match.index >= text.length) {
+							break;
+						}
+
+						var from = match.index;
+						var to = match.index + match[0].length;
+						var p = pos;
+
+						// find the node that contains the match
+						p += currentNode.value.length;
+						while (from >= p) {
+							currentNode = currentNode.next;
+							p += currentNode.value.length;
+						}
+						// adjust pos (and p)
+						p -= currentNode.value.length;
+						pos = p;
+
+						// the current node is a Token, then the match starts inside another Token, which is invalid
+						if (currentNode.value instanceof Token) {
+							continue;
+						}
+
+						// find the last node which is affected by this match
+						for (
+							var k = currentNode;
+							k !== tokenList.tail && (p < to || typeof k.value === 'string');
+							k = k.next
+						) {
+							removeCount++;
+							p += k.value.length;
+						}
+						removeCount--;
+
+						// replace with the new match
+						str = text.slice(pos, p);
+						match.index -= pos;
+					} else {
+						match = matchPattern(pattern, 0, str, lookbehind);
+						if (!match) {
+							continue;
+						}
+					}
+
+					// eslint-disable-next-line no-redeclare
+					var from = match.index;
+					var matchStr = match[0];
+					var before = str.slice(0, from);
+					var after = str.slice(from + matchStr.length);
+
+					var reach = pos + str.length;
+					if (rematch && reach > rematch.reach) {
+						rematch.reach = reach;
+					}
+
+					var removeFrom = currentNode.prev;
+
+					if (before) {
+						removeFrom = addAfter(tokenList, removeFrom, before);
+						pos += before.length;
+					}
+
+					removeRange(tokenList, removeFrom, removeCount);
+
+					var wrapped = new Token(token, inside ? _.tokenize(matchStr, inside) : matchStr, alias, matchStr);
+					currentNode = addAfter(tokenList, removeFrom, wrapped);
+
+					if (after) {
+						addAfter(tokenList, currentNode, after);
+					}
+
+					if (removeCount > 1) {
+						// at least one Token object was removed, so we have to do some rematching
+						// this can only happen if the current pattern is greedy
+
+						/** @type {RematchOptions} */
+						var nestedRematch = {
+							cause: token + ',' + j,
+							reach: reach
+						};
+						matchGrammar(text, tokenList, grammar, currentNode.prev, pos, nestedRematch);
+
+						// the reach might have been extended because of the rematching
+						if (rematch && nestedRematch.reach > rematch.reach) {
+							rematch.reach = nestedRematch.reach;
+						}
+					}
+				}
+			}
+		}
+	}
+
+	/**
+	 * @typedef LinkedListNode
+	 * @property {T} value
+	 * @property {LinkedListNode<T> | null} prev The previous node.
+	 * @property {LinkedListNode<T> | null} next The next node.
+	 * @template T
+	 * @private
+	 */
+
+	/**
+	 * @template T
+	 * @private
+	 */
+	function LinkedList() {
+		/** @type {LinkedListNode<T>} */
+		var head = { value: null, prev: null, next: null };
+		/** @type {LinkedListNode<T>} */
+		var tail = { value: null, prev: head, next: null };
+		head.next = tail;
+
+		/** @type {LinkedListNode<T>} */
+		this.head = head;
+		/** @type {LinkedListNode<T>} */
+		this.tail = tail;
+		this.length = 0;
+	}
+
+	/**
+	 * Adds a new node with the given value to the list.
+	 *
+	 * @param {LinkedList<T>} list
+	 * @param {LinkedListNode<T>} node
+	 * @param {T} value
+	 * @returns {LinkedListNode<T>} The added node.
+	 * @template T
+	 */
+	function addAfter(list, node, value) {
+		// assumes that node != list.tail && values.length >= 0
+		var next = node.next;
+
+		var newNode = { value: value, prev: node, next: next };
+		node.next = newNode;
+		next.prev = newNode;
+		list.length++;
+
+		return newNode;
+	}
+	/**
+	 * Removes `count` nodes after the given node. The given node will not be removed.
+	 *
+	 * @param {LinkedList<T>} list
+	 * @param {LinkedListNode<T>} node
+	 * @param {number} count
+	 * @template T
+	 */
+	function removeRange(list, node, count) {
+		var next = node.next;
+		for (var i = 0; i < count && next !== list.tail; i++) {
+			next = next.next;
+		}
+		node.next = next;
+		next.prev = node;
+		list.length -= i;
+	}
+	/**
+	 * @param {LinkedList<T>} list
+	 * @returns {T[]}
+	 * @template T
+	 */
+	function toArray(list) {
+		var array = [];
+		var node = list.head.next;
+		while (node !== list.tail) {
+			array.push(node.value);
+			node = node.next;
+		}
+		return array;
+	}
+
+
+	if (!_self.document) {
+		if (!_self.addEventListener) {
+			// in Node.js
+			return _;
+		}
+
+		if (!_.disableWorkerMessageHandler) {
+			// In worker
+			_self.addEventListener('message', function (evt) {
+				var message = JSON.parse(evt.data);
+				var lang = message.language;
+				var code = message.code;
+				var immediateClose = message.immediateClose;
+
+				_self.postMessage(_.highlight(code, _.languages[lang], lang));
+				if (immediateClose) {
+					_self.close();
+				}
+			}, false);
+		}
+
+		return _;
+	}
+
+	// Get current script and highlight
+	var script = _.util.currentScript();
+
+	if (script) {
+		_.filename = script.src;
+
+		if (script.hasAttribute('data-manual')) {
+			_.manual = true;
+		}
+	}
+
+	function highlightAutomaticallyCallback() {
+		if (!_.manual) {
+			_.highlightAll();
+		}
+	}
+
+	if (!_.manual) {
+		// If the document state is "loading", then we'll use DOMContentLoaded.
+		// If the document state is "interactive" and the prism.js script is deferred, then we'll also use the
+		// DOMContentLoaded event because there might be some plugins or languages which have also been deferred and they
+		// might take longer one animation frame to execute which can create a race condition where only some plugins have
+		// been loaded when Prism.highlightAll() is executed, depending on how fast resources are loaded.
+		// See https://github.com/PrismJS/prism/issues/2102
+		var readyState = document.readyState;
+		if (readyState === 'loading' || readyState === 'interactive' && script && script.defer) {
+			document.addEventListener('DOMContentLoaded', highlightAutomaticallyCallback);
+		} else {
+			if (window.requestAnimationFrame) {
+				window.requestAnimationFrame(highlightAutomaticallyCallback);
+			} else {
+				window.setTimeout(highlightAutomaticallyCallback, 16);
+			}
+		}
+	}
+
+	return _;
+
+}(_self));
+
+if (typeof module !== 'undefined' && module.exports) {
+	module.exports = Prism;
+}
+
+// hack for components to work correctly in node.js
+if (typeof global !== 'undefined') {
+	global.Prism = Prism;
+}
+
+// some additional documentation/types
+
+/**
+ * The expansion of a simple `RegExp` literal to support additional properties.
+ *
+ * @typedef GrammarToken
+ * @property {RegExp} pattern The regular expression of the token.
+ * @property {boolean} [lookbehind=false] If `true`, then the first capturing group of `pattern` will (effectively)
+ * behave as a lookbehind group meaning that the captured text will not be part of the matched text of the new token.
+ * @property {boolean} [greedy=false] Whether the token is greedy.
+ * @property {string|string[]} [alias] An optional alias or list of aliases.
+ * @property {Grammar} [inside] The nested grammar of this token.
+ *
+ * The `inside` grammar will be used to tokenize the text value of each token of this kind.
+ *
+ * This can be used to make nested and even recursive language definitions.
+ *
+ * Note: This can cause infinite recursion. Be careful when you embed different languages or even the same language into
+ * each another.
+ * @global
+ * @public
+ */
+
+/**
+ * @typedef Grammar
+ * @type {Object<string, RegExp | GrammarToken | Array<RegExp | GrammarToken>>}
+ * @property {Grammar} [rest] An optional grammar object that will be appended to this grammar.
+ * @global
+ * @public
+ */
+
+/**
+ * A function which will invoked after an element was successfully highlighted.
+ *
+ * @callback HighlightCallback
+ * @param {Element} element The element successfully highlighted.
+ * @returns {void}
+ * @global
+ * @public
+ */
+
+/**
+ * @callback HookCallback
+ * @param {Object<string, any>} env The environment variables of the hook.
+ * @returns {void}
+ * @global
+ * @public
+ */
+
+
+/* **********************************************
+     Begin prism-markup.js
+********************************************** */
+
+Prism.languages.markup = {
+	'comment': {
+		pattern: /<!--(?:(?!<!--)[\s\S])*?-->/,
+		greedy: true
+	},
+	'prolog': {
+		pattern: /<\?[\s\S]+?\?>/,
+		greedy: true
+	},
+	'doctype': {
+		// https://www.w3.org/TR/xml/#NT-doctypedecl
+		pattern: /<!DOCTYPE(?:[^>"'[\]]|"[^"]*"|'[^']*')+(?:\[(?:[^<"'\]]|"[^"]*"|'[^']*'|<(?!!--)|<!--(?:[^-]|-(?!->))*-->)*\]\s*)?>/i,
+		greedy: true,
+		inside: {
+			'internal-subset': {
+				pattern: /(^[^\[]*\[)[\s\S]+(?=\]>$)/,
+				lookbehind: true,
+				greedy: true,
+				inside: null // see below
+			},
+			'string': {
+				pattern: /"[^"]*"|'[^']*'/,
+				greedy: true
+			},
+			'punctuation': /^<!|>$|[[\]]/,
+			'doctype-tag': /^DOCTYPE/i,
+			'name': /[^\s<>'"]+/
+		}
+	},
+	'cdata': {
+		pattern: /<!\[CDATA\[[\s\S]*?\]\]>/i,
+		greedy: true
+	},
+	'tag': {
+		pattern: /<\/?(?!\d)[^\s>\/=$<%]+(?:\s(?:\s*[^\s>\/=]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s'">=]+(?=[\s>]))|(?=[\s/>])))+)?\s*\/?>/,
+		greedy: true,
+		inside: {
+			'tag': {
+				pattern: /^<\/?[^\s>\/]+/,
+				inside: {
+					'punctuation': /^<\/?/,
+					'namespace': /^[^\s>\/:]+:/
+				}
+			},
+			'special-attr': [],
+			'attr-value': {
+				pattern: /=\s*(?:"[^"]*"|'[^']*'|[^\s'">=]+)/,
+				inside: {
+					'punctuation': [
+						{
+							pattern: /^=/,
+							alias: 'attr-equals'
+						},
+						{
+							pattern: /^(\s*)["']|["']$/,
+							lookbehind: true
+						}
+					]
+				}
+			},
+			'punctuation': /\/?>/,
+			'attr-name': {
+				pattern: /[^\s>\/]+/,
+				inside: {
+					'namespace': /^[^\s>\/:]+:/
+				}
+			}
+
+		}
+	},
+	'entity': [
+		{
+			pattern: /&[\da-z]{1,8};/i,
+			alias: 'named-entity'
+		},
+		/&#x?[\da-f]{1,8};/i
+	]
+};
+
+Prism.languages.markup['tag'].inside['attr-value'].inside['entity'] =
+	Prism.languages.markup['entity'];
+Prism.languages.markup['doctype'].inside['internal-subset'].inside = Prism.languages.markup;
+
+// Plugin to make entity title show the real entity, idea by Roman Komarov
+Prism.hooks.add('wrap', function (env) {
+
+	if (env.type === 'entity') {
+		env.attributes['title'] = env.content.replace(/&amp;/, '&');
+	}
+});
+
+Object.defineProperty(Prism.languages.markup.tag, 'addInlined', {
+	/**
+	 * Adds an inlined language to markup.
+	 *
+	 * An example of an inlined language is CSS with `<style>` tags.
+	 *
+	 * @param {string} tagName The name of the tag that contains the inlined language. This name will be treated as
+	 * case insensitive.
+	 * @param {string} lang The language key.
+	 * @example
+	 * addInlined('style', 'css');
+	 */
+	value: function addInlined(tagName, lang) {
+		var includedCdataInside = {};
+		includedCdataInside['language-' + lang] = {
+			pattern: /(^<!\[CDATA\[)[\s\S]+?(?=\]\]>$)/i,
+			lookbehind: true,
+			inside: Prism.languages[lang]
+		};
+		includedCdataInside['cdata'] = /^<!\[CDATA\[|\]\]>$/i;
+
+		var inside = {
+			'included-cdata': {
+				pattern: /<!\[CDATA\[[\s\S]*?\]\]>/i,
+				inside: includedCdataInside
+			}
+		};
+		inside['language-' + lang] = {
+			pattern: /[\s\S]+/,
+			inside: Prism.languages[lang]
+		};
+
+		var def = {};
+		def[tagName] = {
+			pattern: RegExp(/(<__[^>]*>)(?:<!\[CDATA\[(?:[^\]]|\](?!\]>))*\]\]>|(?!<!\[CDATA\[)[\s\S])*?(?=<\/__>)/.source.replace(/__/g, function () { return tagName; }), 'i'),
+			lookbehind: true,
+			greedy: true,
+			inside: inside
+		};
+
+		Prism.languages.insertBefore('markup', 'cdata', def);
+	}
+});
+Object.defineProperty(Prism.languages.markup.tag, 'addAttribute', {
+	/**
+	 * Adds an pattern to highlight languages embedded in HTML attributes.
+	 *
+	 * An example of an inlined language is CSS with `style` attributes.
+	 *
+	 * @param {string} attrName The name of the tag that contains the inlined language. This name will be treated as
+	 * case insensitive.
+	 * @param {string} lang The language key.
+	 * @example
+	 * addAttribute('style', 'css');
+	 */
+	value: function (attrName, lang) {
+		Prism.languages.markup.tag.inside['special-attr'].push({
+			pattern: RegExp(
+				/(^|["'\s])/.source + '(?:' + attrName + ')' + /\s*=\s*(?:"[^"]*"|'[^']*'|[^\s'">=]+(?=[\s>]))/.source,
+				'i'
+			),
+			lookbehind: true,
+			inside: {
+				'attr-name': /^[^\s=]+/,
+				'attr-value': {
+					pattern: /=[\s\S]+/,
+					inside: {
+						'value': {
+							pattern: /(^=\s*(["']|(?!["'])))\S[\s\S]*(?=\2$)/,
+							lookbehind: true,
+							alias: [lang, 'language-' + lang],
+							inside: Prism.languages[lang]
+						},
+						'punctuation': [
+							{
+								pattern: /^=/,
+								alias: 'attr-equals'
+							},
+							/"|'/
+						]
+					}
+				}
+			}
+		});
+	}
+});
+
+Prism.languages.html = Prism.languages.markup;
+Prism.languages.mathml = Prism.languages.markup;
+Prism.languages.svg = Prism.languages.markup;
+
+Prism.languages.xml = Prism.languages.extend('markup', {});
+Prism.languages.ssml = Prism.languages.xml;
+Prism.languages.atom = Prism.languages.xml;
+Prism.languages.rss = Prism.languages.xml;
+
+
+/* **********************************************
+     Begin prism-css.js
+********************************************** */
+
+(function (Prism) {
+
+	var string = /(?:"(?:\\(?:\r\n|[\s\S])|[^"\\\r\n])*"|'(?:\\(?:\r\n|[\s\S])|[^'\\\r\n])*')/;
+
+	Prism.languages.css = {
+		'comment': /\/\*[\s\S]*?\*\//,
+		'atrule': {
+			pattern: RegExp('@[\\w-](?:' + /[^;{\s"']|\s+(?!\s)/.source + '|' + string.source + ')*?' + /(?:;|(?=\s*\{))/.source),
+			inside: {
+				'rule': /^@[\w-]+/,
+				'selector-function-argument': {
+					pattern: /(\bselector\s*\(\s*(?![\s)]))(?:[^()\s]|\s+(?![\s)])|\((?:[^()]|\([^()]*\))*\))+(?=\s*\))/,
+					lookbehind: true,
+					alias: 'selector'
+				},
+				'keyword': {
+					pattern: /(^|[^\w-])(?:and|not|only|or)(?![\w-])/,
+					lookbehind: true
+				}
+				// See rest below
+			}
+		},
+		'url': {
+			// https://drafts.csswg.org/css-values-3/#urls
+			pattern: RegExp('\\burl\\((?:' + string.source + '|' + /(?:[^\\\r\n()"']|\\[\s\S])*/.source + ')\\)', 'i'),
+			greedy: true,
+			inside: {
+				'function': /^url/i,
+				'punctuation': /^\(|\)$/,
+				'string': {
+					pattern: RegExp('^' + string.source + '$'),
+					alias: 'url'
+				}
+			}
+		},
+		'selector': {
+			pattern: RegExp('(^|[{}\\s])[^{}\\s](?:[^{};"\'\\s]|\\s+(?![\\s{])|' + string.source + ')*(?=\\s*\\{)'),
+			lookbehind: true
+		},
+		'string': {
+			pattern: string,
+			greedy: true
+		},
+		'property': {
+			pattern: /(^|[^-\w\xA0-\uFFFF])(?!\s)[-_a-z\xA0-\uFFFF](?:(?!\s)[-\w\xA0-\uFFFF])*(?=\s*:)/i,
+			lookbehind: true
+		},
+		'important': /!important\b/i,
+		'function': {
+			pattern: /(^|[^-a-z0-9])[-a-z0-9]+(?=\()/i,
+			lookbehind: true
+		},
+		'punctuation': /[(){};:,]/
+	};
+
+	Prism.languages.css['atrule'].inside.rest = Prism.languages.css;
+
+	var markup = Prism.languages.markup;
+	if (markup) {
+		markup.tag.addInlined('style', 'css');
+		markup.tag.addAttribute('style', 'css');
+	}
+
+}(Prism));
+
+
+/* **********************************************
+     Begin prism-clike.js
+********************************************** */
+
+Prism.languages.clike = {
+	'comment': [
+		{
+			pattern: /(^|[^\\])\/\*[\s\S]*?(?:\*\/|$)/,
+			lookbehind: true,
+			greedy: true
+		},
+		{
+			pattern: /(^|[^\\:])\/\/.*/,
+			lookbehind: true,
+			greedy: true
+		}
+	],
+	'string': {
+		pattern: /(["'])(?:\\(?:\r\n|[\s\S])|(?!\1)[^\\\r\n])*\1/,
+		greedy: true
+	},
+	'class-name': {
+		pattern: /(\b(?:class|extends|implements|instanceof|interface|new|trait)\s+|\bcatch\s+\()[\w.\\]+/i,
+		lookbehind: true,
+		inside: {
+			'punctuation': /[.\\]/
+		}
+	},
+	'keyword': /\b(?:break|catch|continue|do|else|finally|for|function|if|in|instanceof|new|null|return|throw|try|while)\b/,
+	'boolean': /\b(?:false|true)\b/,
+	'function': /\b\w+(?=\()/,
+	'number': /\b0x[\da-f]+\b|(?:\b\d+(?:\.\d*)?|\B\.\d+)(?:e[+-]?\d+)?/i,
+	'operator': /[<>]=?|[!=]=?=?|--?|\+\+?|&&?|\|\|?|[?*/~^%]/,
+	'punctuation': /[{}[\];(),.:]/
+};
+
+
+/* **********************************************
+     Begin prism-javascript.js
+********************************************** */
+
+Prism.languages.javascript = Prism.languages.extend('clike', {
+	'class-name': [
+		Prism.languages.clike['class-name'],
+		{
+			pattern: /(^|[^$\w\xA0-\uFFFF])(?!\s)[_$A-Z\xA0-\uFFFF](?:(?!\s)[$\w\xA0-\uFFFF])*(?=\.(?:constructor|prototype))/,
+			lookbehind: true
+		}
+	],
+	'keyword': [
+		{
+			pattern: /((?:^|\})\s*)catch\b/,
+			lookbehind: true
+		},
+		{
+			pattern: /(^|[^.]|\.\.\.\s*)\b(?:as|assert(?=\s*\{)|async(?=\s*(?:function\b|\(|[$\w\xA0-\uFFFF]|$))|await|break|case|class|const|continue|debugger|default|delete|do|else|enum|export|extends|finally(?=\s*(?:\{|$))|for|from(?=\s*(?:['"]|$))|function|(?:get|set)(?=\s*(?:[#\[$\w\xA0-\uFFFF]|$))|if|implements|import|in|instanceof|interface|let|new|null|of|package|private|protected|public|return|static|super|switch|this|throw|try|typeof|undefined|var|void|while|with|yield)\b/,
+			lookbehind: true
+		},
+	],
+	// Allow for all non-ASCII characters (See http://stackoverflow.com/a/2008444)
+	'function': /#?(?!\s)[_$a-zA-Z\xA0-\uFFFF](?:(?!\s)[$\w\xA0-\uFFFF])*(?=\s*(?:\.\s*(?:apply|bind|call)\s*)?\()/,
+	'number': {
+		pattern: RegExp(
+			/(^|[^\w$])/.source +
+			'(?:' +
+			(
+				// constant
+				/NaN|Infinity/.source +
+				'|' +
+				// binary integer
+				/0[bB][01]+(?:_[01]+)*n?/.source +
+				'|' +
+				// octal integer
+				/0[oO][0-7]+(?:_[0-7]+)*n?/.source +
+				'|' +
+				// hexadecimal integer
+				/0[xX][\dA-Fa-f]+(?:_[\dA-Fa-f]+)*n?/.source +
+				'|' +
+				// decimal bigint
+				/\d+(?:_\d+)*n/.source +
+				'|' +
+				// decimal number (integer or float) but no bigint
+				/(?:\d+(?:_\d+)*(?:\.(?:\d+(?:_\d+)*)?)?|\.\d+(?:_\d+)*)(?:[Ee][+-]?\d+(?:_\d+)*)?/.source
+			) +
+			')' +
+			/(?![\w$])/.source
+		),
+		lookbehind: true
+	},
+	'operator': /--|\+\+|\*\*=?|=>|&&=?|\|\|=?|[!=]==|<<=?|>>>?=?|[-+*/%&|^!=<>]=?|\.{3}|\?\?=?|\?\.?|[~:]/
+});
+
+Prism.languages.javascript['class-name'][0].pattern = /(\b(?:class|extends|implements|instanceof|interface|new)\s+)[\w.\\]+/;
+
+Prism.languages.insertBefore('javascript', 'keyword', {
+	'regex': {
+		pattern: RegExp(
+			// lookbehind
+			// eslint-disable-next-line regexp/no-dupe-characters-character-class
+			/((?:^|[^$\w\xA0-\uFFFF."'\])\s]|\b(?:return|yield))\s*)/.source +
+			// Regex pattern:
+			// There are 2 regex patterns here. The RegExp set notation proposal added support for nested character
+			// classes if the `v` flag is present. Unfortunately, nested CCs are both context-free and incompatible
+			// with the only syntax, so we have to define 2 different regex patterns.
+			/\//.source +
+			'(?:' +
+			/(?:\[(?:[^\]\\\r\n]|\\.)*\]|\\.|[^/\\\[\r\n])+\/[dgimyus]{0,7}/.source +
+			'|' +
+			// `v` flag syntax. This supports 3 levels of nested character classes.
+			/(?:\[(?:[^[\]\\\r\n]|\\.|\[(?:[^[\]\\\r\n]|\\.|\[(?:[^[\]\\\r\n]|\\.)*\])*\])*\]|\\.|[^/\\\[\r\n])+\/[dgimyus]{0,7}v[dgimyus]{0,7}/.source +
+			')' +
+			// lookahead
+			/(?=(?:\s|\/\*(?:[^*]|\*(?!\/))*\*\/)*(?:$|[\r\n,.;:})\]]|\/\/))/.source
+		),
+		lookbehind: true,
+		greedy: true,
+		inside: {
+			'regex-source': {
+				pattern: /^(\/)[\s\S]+(?=\/[a-z]*$)/,
+				lookbehind: true,
+				alias: 'language-regex',
+				inside: Prism.languages.regex
+			},
+			'regex-delimiter': /^\/|\/$/,
+			'regex-flags': /^[a-z]+$/,
+		}
+	},
+	// This must be declared before keyword because we use "function" inside the look-forward
+	'function-variable': {
+		pattern: /#?(?!\s)[_$a-zA-Z\xA0-\uFFFF](?:(?!\s)[$\w\xA0-\uFFFF])*(?=\s*[=:]\s*(?:async\s*)?(?:\bfunction\b|(?:\((?:[^()]|\([^()]*\))*\)|(?!\s)[_$a-zA-Z\xA0-\uFFFF](?:(?!\s)[$\w\xA0-\uFFFF])*)\s*=>))/,
+		alias: 'function'
+	},
+	'parameter': [
+		{
+			pattern: /(function(?:\s+(?!\s)[_$a-zA-Z\xA0-\uFFFF](?:(?!\s)[$\w\xA0-\uFFFF])*)?\s*\(\s*)(?!\s)(?:[^()\s]|\s+(?![\s)])|\([^()]*\))+(?=\s*\))/,
+			lookbehind: true,
+			inside: Prism.languages.javascript
+		},
+		{
+			pattern: /(^|[^$\w\xA0-\uFFFF])(?!\s)[_$a-z\xA0-\uFFFF](?:(?!\s)[$\w\xA0-\uFFFF])*(?=\s*=>)/i,
+			lookbehind: true,
+			inside: Prism.languages.javascript
+		},
+		{
+			pattern: /(\(\s*)(?!\s)(?:[^()\s]|\s+(?![\s)])|\([^()]*\))+(?=\s*\)\s*=>)/,
+			lookbehind: true,
+			inside: Prism.languages.javascript
+		},
+		{
+			pattern: /((?:\b|\s|^)(?!(?:as|async|await|break|case|catch|class|const|continue|debugger|default|delete|do|else|enum|export|extends|finally|for|from|function|get|if|implements|import|in|instanceof|interface|let|new|null|of|package|private|protected|public|return|set|static|super|switch|this|throw|try|typeof|undefined|var|void|while|with|yield)(?![$\w\xA0-\uFFFF]))(?:(?!\s)[_$a-zA-Z\xA0-\uFFFF](?:(?!\s)[$\w\xA0-\uFFFF])*\s*)\(\s*|\]\s*\(\s*)(?!\s)(?:[^()\s]|\s+(?![\s)])|\([^()]*\))+(?=\s*\)\s*\{)/,
+			lookbehind: true,
+			inside: Prism.languages.javascript
+		}
+	],
+	'constant': /\b[A-Z](?:[A-Z_]|\dx?)*\b/
+});
+
+Prism.languages.insertBefore('javascript', 'string', {
+	'hashbang': {
+		pattern: /^#!.*/,
+		greedy: true,
+		alias: 'comment'
+	},
+	'template-string': {
+		pattern: /`(?:\\[\s\S]|\$\{(?:[^{}]|\{(?:[^{}]|\{[^}]*\})*\})+\}|(?!\$\{)[^\\`])*`/,
+		greedy: true,
+		inside: {
+			'template-punctuation': {
+				pattern: /^`|`$/,
+				alias: 'string'
+			},
+			'interpolation': {
+				pattern: /((?:^|[^\\])(?:\\{2})*)\$\{(?:[^{}]|\{(?:[^{}]|\{[^}]*\})*\})+\}/,
+				lookbehind: true,
+				inside: {
+					'interpolation-punctuation': {
+						pattern: /^\$\{|\}$/,
+						alias: 'punctuation'
+					},
+					rest: Prism.languages.javascript
+				}
+			},
+			'string': /[\s\S]+/
+		}
+	},
+	'string-property': {
+		pattern: /((?:^|[,{])[ \t]*)(["'])(?:\\(?:\r\n|[\s\S])|(?!\2)[^\\\r\n])*\2(?=\s*:)/m,
+		lookbehind: true,
+		greedy: true,
+		alias: 'property'
+	}
+});
+
+Prism.languages.insertBefore('javascript', 'operator', {
+	'literal-property': {
+		pattern: /((?:^|[,{])[ \t]*)(?!\s)[_$a-zA-Z\xA0-\uFFFF](?:(?!\s)[$\w\xA0-\uFFFF])*(?=\s*:)/m,
+		lookbehind: true,
+		alias: 'property'
+	},
+});
+
+if (Prism.languages.markup) {
+	Prism.languages.markup.tag.addInlined('script', 'javascript');
+
+	// add attribute support for all DOM events.
+	// https://developer.mozilla.org/en-US/docs/Web/Events#Standard_events
+	Prism.languages.markup.tag.addAttribute(
+		/on(?:abort|blur|change|click|composition(?:end|start|update)|dblclick|error|focus(?:in|out)?|key(?:down|up)|load|mouse(?:down|enter|leave|move|out|over|up)|reset|resize|scroll|select|slotchange|submit|unload|wheel)/.source,
+		'javascript'
+	);
+}
+
+Prism.languages.js = Prism.languages.javascript;
+
+
+/* **********************************************
+     Begin prism-file-highlight.js
+********************************************** */
+
+(function () {
+
+	if (typeof Prism === 'undefined' || typeof document === 'undefined') {
+		return;
+	}
+
+	// https://developer.mozilla.org/en-US/docs/Web/API/Element/matches#Polyfill
+	if (!Element.prototype.matches) {
+		Element.prototype.matches = Element.prototype.msMatchesSelector || Element.prototype.webkitMatchesSelector;
+	}
+
+	var LOADING_MESSAGE = 'Loading…';
+	var FAILURE_MESSAGE = function (status, message) {
+		return '✖ Error ' + status + ' while fetching file: ' + message;
+	};
+	var FAILURE_EMPTY_MESSAGE = '✖ Error: File does not exist or is empty';
+
+	var EXTENSIONS = {
+		'js': 'javascript',
+		'py': 'python',
+		'rb': 'ruby',
+		'ps1': 'powershell',
+		'psm1': 'powershell',
+		'sh': 'bash',
+		'bat': 'batch',
+		'h': 'c',
+		'tex': 'latex'
+	};
+
+	var STATUS_ATTR = 'data-src-status';
+	var STATUS_LOADING = 'loading';
+	var STATUS_LOADED = 'loaded';
+	var STATUS_FAILED = 'failed';
+
+	var SELECTOR = 'pre[data-src]:not([' + STATUS_ATTR + '="' + STATUS_LOADED + '"])'
+		+ ':not([' + STATUS_ATTR + '="' + STATUS_LOADING + '"])';
+
+	/**
+	 * Loads the given file.
+	 *
+	 * @param {string} src The URL or path of the source file to load.
+	 * @param {(result: string) => void} success
+	 * @param {(reason: string) => void} error
+	 */
+	function loadFile(src, success, error) {
+		var xhr = new XMLHttpRequest();
+		xhr.open('GET', src, true);
+		xhr.onreadystatechange = function () {
+			if (xhr.readyState == 4) {
+				if (xhr.status < 400 && xhr.responseText) {
+					success(xhr.responseText);
+				} else {
+					if (xhr.status >= 400) {
+						error(FAILURE_MESSAGE(xhr.status, xhr.statusText));
+					} else {
+						error(FAILURE_EMPTY_MESSAGE);
+					}
+				}
+			}
+		};
+		xhr.send(null);
+	}
+
+	/**
+	 * Parses the given range.
+	 *
+	 * This returns a range with inclusive ends.
+	 *
+	 * @param {string | null | undefined} range
+	 * @returns {[number, number | undefined] | undefined}
+	 */
+	function parseRange(range) {
+		var m = /^\s*(\d+)\s*(?:(,)\s*(?:(\d+)\s*)?)?$/.exec(range || '');
+		if (m) {
+			var start = Number(m[1]);
+			var comma = m[2];
+			var end = m[3];
+
+			if (!comma) {
+				return [start, start];
+			}
+			if (!end) {
+				return [start, undefined];
+			}
+			return [start, Number(end)];
+		}
+		return undefined;
+	}
+
+	Prism.hooks.add('before-highlightall', function (env) {
+		env.selector += ', ' + SELECTOR;
+	});
+
+	Prism.hooks.add('before-sanity-check', function (env) {
+		var pre = /** @type {HTMLPreElement} */ (env.element);
+		if (pre.matches(SELECTOR)) {
+			env.code = ''; // fast-path the whole thing and go to complete
+
+			pre.setAttribute(STATUS_ATTR, STATUS_LOADING); // mark as loading
+
+			// add code element with loading message
+			var code = pre.appendChild(document.createElement('CODE'));
+			code.textContent = LOADING_MESSAGE;
+
+			var src = pre.getAttribute('data-src');
+
+			var language = env.language;
+			if (language === 'none') {
+				// the language might be 'none' because there is no language set;
+				// in this case, we want to use the extension as the language
+				var extension = (/\.(\w+)$/.exec(src) || [, 'none'])[1];
+				language = EXTENSIONS[extension] || extension;
+			}
+
+			// set language classes
+			Prism.util.setLanguage(code, language);
+			Prism.util.setLanguage(pre, language);
+
+			// preload the language
+			var autoloader = Prism.plugins.autoloader;
+			if (autoloader) {
+				autoloader.loadLanguages(language);
+			}
+
+			// load file
+			loadFile(
+				src,
+				function (text) {
+					// mark as loaded
+					pre.setAttribute(STATUS_ATTR, STATUS_LOADED);
+
+					// handle data-range
+					var range = parseRange(pre.getAttribute('data-range'));
+					if (range) {
+						var lines = text.split(/\r\n?|\n/g);
+
+						// the range is one-based and inclusive on both ends
+						var start = range[0];
+						var end = range[1] == null ? lines.length : range[1];
+
+						if (start < 0) { start += lines.length; }
+						start = Math.max(0, Math.min(start - 1, lines.length));
+						if (end < 0) { end += lines.length; }
+						end = Math.max(0, Math.min(end, lines.length));
+
+						text = lines.slice(start, end).join('\n');
+
+						// add data-start for line numbers
+						if (!pre.hasAttribute('data-start')) {
+							pre.setAttribute('data-start', String(start + 1));
+						}
+					}
+
+					// highlight code
+					code.textContent = text;
+					Prism.highlightElement(code);
+				},
+				function (error) {
+					// mark as failed
+					pre.setAttribute(STATUS_ATTR, STATUS_FAILED);
+
+					code.textContent = error;
+				}
+			);
+		}
+	});
+
+	Prism.plugins.fileHighlight = {
+		/**
+		 * Executes the File Highlight plugin for all matching `pre` elements under the given container.
+		 *
+		 * Note: Elements which are already loaded or currently loading will not be touched by this method.
+		 *
+		 * @param {ParentNode} [container=document]
+		 */
+		highlight: function highlight(container) {
+			var elements = (container || document).querySelectorAll(SELECTOR);
+
+			for (var i = 0, element; (element = elements[i++]);) {
+				Prism.highlightElement(element);
+			}
+		}
+	};
+
+	var logged = false;
+	/** @deprecated Use `Prism.plugins.fileHighlight.highlight` instead. */
+	Prism.fileHighlight = function () {
+		if (!logged) {
+			console.warn('Prism.fileHighlight is deprecated. Use `Prism.plugins.fileHighlight.highlight` instead.');
+			logged = true;
+		}
+		Prism.plugins.fileHighlight.highlight.apply(this, arguments);
+	};
+
+}());
+
+</script>
+</head>
+<body>
+<div id="app">
+  <header class="topbar">
+    <div class="brand"><span class="brand-mark" aria-hidden="true">&lt;/&gt;</span><span class="brand-name">HTML-блокнот</span></div>
+    <button class="proj-btn" id="projBtn" type="button" aria-haspopup="dialog" title="Проекты"><span id="projName">Проект</span><span class="chev" aria-hidden="true">▾</span></button>
+    <span class="spacer"></span>
+    <span class="status" id="status" data-state="connecting" role="status">Подключение…</span>
+    <div class="seg" role="group" aria-label="Что показывать" id="viewSeg">
+      <button type="button" data-view="code">Код</button>
+      <button type="button" data-view="split">Оба</button>
+      <button type="button" data-view="preview">Превью</button>
+    </div>
+    <button class="btn btn-primary" id="runBtn" type="button" title="Обновить превью (⌘ + Enter)"><span aria-hidden="true">▶</span><span class="lbl">Запустить</span></button>
+    <button class="btn icon" id="menuBtn" type="button" aria-label="Меню" aria-haspopup="dialog">⋯</button>
+  </header>
+
+  <div class="tip" id="tip" hidden>
+    <p><b>＋</b> на панели символов вставляет готовые теги и свойства. <code>div.card</code> и <kbd>⇥</kbd> дают <code>&lt;div class="card"&gt;&lt;/div&gt;</code>, <code>!</code> и <kbd>⇥</kbd> создают каркас страницы. Поиск по коду: <kbd>⌕</kbd>.</p>
+    <button class="btn ghost sm" id="tipClose" type="button" aria-label="Скрыть подсказку">✕</button>
+  </div>
+
+  <main id="main" data-view="split">
+    <section class="pane" id="editorPane" aria-label="Редактор">
+      <div class="tabs" role="tablist" aria-label="Файлы">
+        <button role="tab" type="button" data-tab="html" aria-selected="true">index.html</button>
+        <button role="tab" type="button" data-tab="css" aria-selected="false">style.css</button>
+        <button role="tab" type="button" data-tab="js" aria-selected="false">script.js</button>
+        <span class="spacer"></span>
+        <span class="pos" id="pos">Стр 1 · Кол 1</span>
+      </div>
+      <div class="findbar" id="findbar" hidden>
+        <div class="findrow">
+          <input id="findIn" type="search" placeholder="Найти" aria-label="Найти" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="search">
+          <span class="findcount" id="findCount" aria-live="polite"></span>
+          <button class="btn sm" id="findPrev" type="button" aria-label="Предыдущее">↑</button>
+          <button class="btn sm" id="findNext" type="button" aria-label="Следующее">↓</button>
+        </div>
+        <div class="findrow">
+          <input id="replIn" type="text" placeholder="Заменить на" aria-label="Заменить на" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+          <button class="btn sm" id="replOne" type="button">Заменить</button>
+          <button class="btn sm" id="replAll" type="button">Все</button>
+          <button class="btn sm ghost" id="findClose" type="button" aria-label="Закрыть поиск">✕</button>
+        </div>
+      </div>
+      <div class="keybar" id="keybar" aria-label="Символы для кода"></div>
+      <div class="editor" id="editor">
+        <pre id="hlPre" aria-hidden="true"><code id="hl"></code></pre>
+        <textarea id="code" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" aria-label="Код файла index.html"></textarea>
+      </div>
+    </section>
+    <div class="divider" id="divider" role="separator" tabindex="0" aria-orientation="vertical" aria-label="Граница между кодом и превью"></div>
+    <section class="pane" id="previewPane" aria-label="Превью">
+      <div class="preview-head">
+        <div class="seg small" role="group" aria-label="Ширина превью" id="devSeg">
+          <button type="button" data-w="auto" title="По ширине панели">Авто</button>
+          <button type="button" data-w="390" title="Телефон">390</button>
+          <button type="button" data-w="768" title="Планшет">768</button>
+          <button type="button" data-w="1280" title="Ноутбук">1280</button>
+        </div>
+        <span class="wread" id="wread"></span>
+        <span class="spacer"></span>
+        <label class="switch" for="autorun"><input type="checkbox" id="autorun"><span>Автообновление</span></label>
+        <button class="btn sm" id="consoleBtn" type="button" aria-expanded="false" aria-controls="console">Консоль <span class="badge" id="badge" hidden>0</span></button>
+      </div>
+      <div class="stage" id="stage">
+        <div class="frame-box" id="frameBox"><iframe id="frame" title="Превью страницы" sandbox="allow-scripts allow-modals allow-forms"></iframe></div>
+        <div class="stale" id="stale" hidden>Есть изменения: нажмите ▶</div>
+      </div>
+      <div class="console" id="console" hidden>
+        <div class="console-head">
+          <strong>Консоль</strong><span class="spacer"></span>
+          <button class="btn sm ghost" id="clearLog" type="button">Очистить</button>
+          <button class="btn sm ghost" id="closeLog" type="button" aria-label="Скрыть консоль">✕</button>
+        </div>
+        <div class="console-list" id="logList" role="log" aria-live="polite"></div>
+      </div>
+    </section>
+  </main>
+</div>
+<input type="file" id="fileIn" class="vh" multiple accept=".html,.htm,.css,.js,text/html,text/css,text/javascript,image/*" aria-label="Открыть файлы">
+<input type="file" id="imgIn" class="vh" multiple accept="image/*" aria-label="Добавить картинки">
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script>
+(function () {
+'use strict';
+
+/* ---------- environment ---------- */
+const TG = (() => { try { const w = window.Telegram && window.Telegram.WebApp; return w && w.initData ? w : null; } catch (e) { return null; } })();
+const tgAt = v => { try { return !!(TG && typeof TG.isVersionAtLeast === 'function' && TG.isVersionAtLeast(v)); } catch (e) { return false; } };
+const IN_ARTIFACT = !TG && (/claude/i.test(location.hostname) || !!window.claude);
+const DS = tgAt('9.0') && TG.DeviceStorage ? TG.DeviceStorage : null;
+function haptic(kind) {
+  if (!tgAt('6.1') || !TG.HapticFeedback) return;
+  try { if (kind === 'tick') TG.HapticFeedback.selectionChanged(); else TG.HapticFeedback.notificationOccurred(kind); } catch (e) { /* ignore */ }
+}
+
+/* ---------- helpers ---------- */
+const $ = (s, r) => (r || document).querySelector(s);
+const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
+function el(tag, attrs, ...kids) {
+  const n = document.createElement(tag);
+  if (attrs) for (const k in attrs) {
+    const v = attrs[k];
+    if (v == null || v === false) continue;
+    if (k === 'class') n.className = v;
+    else if (k === 'text') n.textContent = v;
+    else if (k.slice(0, 2) === 'on' && typeof v === 'function') n.addEventListener(k.slice(2), v);
+    else n.setAttribute(k, v === true ? '' : v);
+  }
+  for (const c of kids) if (c != null && c !== false) n.append(c.nodeType ? c : String(c));
+  return n;
+}
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const dsKey = k => k.replace(/[^A-Za-z0-9_-]/g, '_');
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) {
+    const s = JSON.stringify(v);
+    let ok = true;
+    try { localStorage.setItem(k, s); } catch (e) { ok = false; }
+    if (DS) { try { DS.setItem(dsKey(k), s, () => {}); ok = true; } catch (e) { /* ignore */ } }
+    return ok;
+  },
+  del(k) {
+    try { localStorage.removeItem(k); } catch (e) { /* ignore */ }
+    if (DS) { try { DS.removeItem(dsKey(k), () => {}); } catch (e) { /* ignore */ } }
+  }
+};
+function dsGet(k) {
+  return new Promise(res => {
+    if (!DS) { res(null); return; }
+    try {
+      DS.getItem(dsKey(k), (err, val) => {
+        if (err || val == null || val === '') { res(null); return; }
+        try { res(JSON.parse(val)); } catch (x) { res(null); }
+      });
+    } catch (e) { res(null); }
+  });
+}
+const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+function plural(n, one, few, many) {
+  const a = n % 10, b = n % 100;
+  if (a === 1 && b !== 11) return one;
+  if (a >= 2 && a <= 4 && (b < 12 || b > 14)) return few;
+  return many;
+}
+const dateFmt = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+let toastTimer = 0;
+function toast(msg) {
+  const t = $('#toast');
+  t.textContent = msg; t.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.hidden = true; }, 2600);
+}
+function hexToRgba(hex, a) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex || '');
+  if (!m) return null;
+  const n = parseInt(m[1], 16);
+  return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
+}
+
+/* ---------- templates and snippets ---------- */
+const TPL = {
+  card: {
+    name: 'Карточка профиля', desc: 'Центровка через grid, кнопка со счётчиком',
+    html: `<main class="card">
+  <div class="avatar">АК</div>
+  <h1>Анна Котова</h1>
+  <p class="role">Верстальщица · Москва</p>
+  <p>Учусь собирать сайты на HTML и CSS. Поменяйте этот текст: превью обновится само.</p>
+  <button id="like">Нравится ♥ <span id="count">0</span></button>
+</main>
+`,
+    css: `/* Эти стили подключаются к странице автоматически */
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  font-family: system-ui, sans-serif;
+  background: #eef1f5;
+}
+
+.card {
+  width: min(340px, 90vw);
+  padding: 28px;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.08);
+  text-align: center;
+}
+
+.avatar {
+  width: 72px;
+  height: 72px;
+  margin: 0 auto 12px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: #d2461a;
+  color: #fff;
+  font-size: 24px;
+  font-weight: 700;
+}
+
+h1 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.role {
+  margin: 4px 0 16px;
+  color: #777;
+}
+
+button {
+  margin-top: 8px;
+  padding: 10px 18px;
+  border: 0;
+  border-radius: 999px;
+  background: #1a1e26;
+  color: #fff;
+  font-size: 15px;
+  cursor: pointer;
+}
+`,
+    js: `// Этот код выполняется после HTML.
+// console.log пишет в «Консоль» под превью.
+const btn = document.querySelector('#like');
+const count = document.querySelector('#count');
+let likes = 0;
+
+btn.addEventListener('click', () => {
+  likes++;
+  count.textContent = likes;
+  console.log('Лайков:', likes);
+});
+`
+  },
+  blank: {
+    name: 'Пустая страница', desc: 'Только заголовок, дальше пишете сами',
+    html: `<h1>Привет, мир!</h1>
+`,
+    css: `body {
+  margin: 24px;
+  font-family: system-ui, sans-serif;
+}
+`,
+    js: ''
+  },
+  landing: {
+    name: 'Лендинг', desc: 'Шапка, первый экран, три карточки на flex, подвал',
+    html: `<header class="top">
+  <a class="logo" href="#">Зерно</a>
+  <nav>
+    <a href="#menu">Меню</a>
+    <a href="#contacts">Контакты</a>
+  </nav>
+</header>
+
+<section class="hero">
+  <h1>Кофе, ради которого стоит выйти пораньше</h1>
+  <p>Обжариваем зерно сами, каждую неделю. Открыты с 8:00.</p>
+  <a class="cta" href="#contacts">Как нас найти</a>
+</section>
+
+<section class="features" id="menu">
+  <article>
+    <h3>Эспрессо</h3>
+    <p>Плотный, с нотами шоколада. 30 мл.</p>
+    <strong>150 ₽</strong>
+  </article>
+  <article>
+    <h3>Капучино</h3>
+    <p>Эспрессо и молоко 65 °C. 250 мл.</p>
+    <strong>220 ₽</strong>
+  </article>
+  <article>
+    <h3>Фильтр</h3>
+    <p>Зерно недели, заваренное в воронке. 300 мл.</p>
+    <strong>250 ₽</strong>
+  </article>
+</section>
+
+<footer id="contacts">
+  <p>ул. Примерная, 1 · каждый день 8:00–22:00</p>
+</footer>
+`,
+    css: `* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  color: #222;
+  line-height: 1.5;
+}
+
+.top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 24px;
+  border-bottom: 1px solid #eee;
+}
+
+.logo {
+  font-size: 22px;
+  font-weight: 800;
+  color: #6b3e26;
+  text-decoration: none;
+}
+
+nav {
+  display: flex;
+  gap: 20px;
+}
+
+nav a {
+  color: #444;
+  text-decoration: none;
+}
+
+.hero {
+  padding: 64px 24px;
+  text-align: center;
+  background: #f6efe7;
+}
+
+.hero h1 {
+  max-width: 640px;
+  margin: 0 auto 12px;
+  font-size: clamp(28px, 5vw, 44px);
+  line-height: 1.15;
+}
+
+.cta {
+  display: inline-block;
+  margin-top: 12px;
+  padding: 12px 22px;
+  border-radius: 999px;
+  background: #6b3e26;
+  color: #fff;
+  text-decoration: none;
+}
+
+.features {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 40px 24px;
+}
+
+.features article {
+  flex: 1 1 240px;
+  padding: 20px;
+  border: 1px solid #eee;
+  border-radius: 12px;
+}
+
+.features h3 {
+  margin-top: 0;
+}
+
+footer {
+  padding: 24px;
+  border-top: 1px solid #eee;
+  color: #777;
+  text-align: center;
+}
+`,
+    js: ''
+  },
+  grid: {
+    name: 'Галерея на Grid', desc: 'Сетка сама перестраивается под ширину экрана',
+    html: `<h1>Галерея</h1>
+<p class="hint">Переключайте ширину превью: 390, 768, 1280. Плитки перестраиваются сами.</p>
+
+<div class="gallery">
+  <div class="tile t1">1</div>
+  <div class="tile t2 wide">2, широкая</div>
+  <div class="tile t3">3</div>
+  <div class="tile t4">4</div>
+  <div class="tile t5 tall">5, высокая</div>
+  <div class="tile t6">6</div>
+  <div class="tile t7">7</div>
+  <div class="tile t8">8</div>
+</div>
+`,
+    css: `body {
+  margin: 0;
+  padding: 24px;
+  font-family: system-ui, sans-serif;
+  background: #f4f5f7;
+}
+
+.hint {
+  color: #666;
+}
+
+.gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  grid-auto-rows: 120px;
+  gap: 12px;
+}
+
+.tile {
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  color: #fff;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.wide { grid-column: span 2; }
+.tall { grid-row: span 2; }
+
+.t1 { background: #d2461a; }
+.t2 { background: #1f5fbf; }
+.t3 { background: #1d7a52; }
+.t4 { background: #7a4fb0; }
+.t5 { background: #a2580b; }
+.t6 { background: #c4302b; }
+.t7 { background: #2a7f8f; }
+.t8 { background: #4b5563; }
+`,
+    js: ''
+  },
+  full: {
+    name: 'Страница целиком', desc: 'Как в видеоуроках: index.html с <head> и подключённым style.css',
+    html: `<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Мой сайт</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <h1>Мой сайт</h1>
+  <p>Строки с style.css и script.js можно оставить, как в уроках: вкладки подключаются сами.</p>
+  <button id="btn">Нажми меня</button>
+
+  <script src="script.js"><\/script>
+</body>
+</html>
+`,
+    css: `body {
+  max-width: 680px;
+  margin: 40px auto;
+  padding: 0 16px;
+  font-family: system-ui, sans-serif;
+}
+
+button {
+  padding: 10px 16px;
+  border: 0;
+  border-radius: 8px;
+  background: #1f5fbf;
+  color: #fff;
+  font-size: 15px;
+}
+`,
+    js: `document.getElementById('btn').addEventListener('click', () => {
+  console.log('Кнопка нажата');
+});
+`
+  }
+};
+const TPL_ORDER = ['blank', 'card', 'landing', 'grid', 'full'];
+const C = '\u0000'; // caret marker in snippets
+const BOILERPLATE = `<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Документ</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  ${C}
+  <script src="script.js"><\/script>
+</body>
+</html>`;
+const SNIP = {
+  html: [
+    ['Каркас', [
+      ['Страница целиком', BOILERPLATE],
+      ['div.container', '<div class="container">\n  ' + C + '\n</div>'],
+      ['header', '<header>\n  ' + C + '\n</header>'],
+      ['nav + 3 ссылки', '<nav>\n  <a href="#">' + C + 'Главная</a>\n  <a href="#">О нас</a>\n  <a href="#">Контакты</a>\n</nav>'],
+      ['main', '<main>\n  ' + C + '\n</main>'],
+      ['section', '<section>\n  <h2>' + C + '</h2>\n  <p></p>\n</section>'],
+      ['footer', '<footer>\n  ' + C + '\n</footer>']
+    ]],
+    ['Текст', [
+      ['h1', '<h1>' + C + '</h1>'], ['h2', '<h2>' + C + '</h2>'], ['h3', '<h3>' + C + '</h3>'],
+      ['p', '<p>' + C + '</p>'], ['a', '<a href="' + C + '"></a>'], ['strong', '<strong>' + C + '</strong>'],
+      ['span', '<span>' + C + '</span>'], ['br', '<br>']
+    ]],
+    ['Списки и картинки', [
+      ['ul > li ×3', '<ul>\n  <li>' + C + '</li>\n  <li></li>\n  <li></li>\n</ul>'],
+      ['ol > li ×3', '<ol>\n  <li>' + C + '</li>\n  <li></li>\n  <li></li>\n</ol>'],
+      ['img', '<img src="' + C + '" alt="">'],
+      ['картинка с подписью', '<figure>\n  <img src="' + C + '" alt="">\n  <figcaption></figcaption>\n</figure>']
+    ]],
+    ['Формы', [
+      ['button', '<button>' + C + '</button>'],
+      ['input', '<input type="text" placeholder="' + C + '">'],
+      ['label + input', '<label for="name">Имя</label>\n<input id="name" type="text" placeholder="' + C + '">'],
+      ['textarea', '<textarea rows="4">' + C + '</textarea>'],
+      ['select', '<select>\n  <option>' + C + '</option>\n  <option></option>\n</select>'],
+      ['form', '<form>\n  ' + C + '\n  <button type="submit">Отправить</button>\n</form>']
+    ]],
+    ['Подключить', [
+      ['style.css', '<link rel="stylesheet" href="style.css">'],
+      ['script.js', '<script src="script.js"><\/script>'],
+      ['комментарий', '<!-- ' + C + ' -->']
+    ]]
+  ],
+  css: [
+    ['Селекторы', [
+      ['.класс { }', '.' + C + ' {\n  \n}'], ['#id { }', '#' + C + ' {\n  \n}'], [':hover', ':hover {\n  ' + C + '\n}'],
+      ['@media телефон', '@media (max-width: 600px) {\n  ' + C + '\n}'],
+      [':root переменные', ':root {\n  --main-color: ' + C + '#d2461a;\n}'],
+      ['* сброс', '* {\n  box-sizing: border-box;\n  margin: 0;\n  padding: 0;\n}']
+    ]],
+    ['Flex и Grid', [
+      ['display: flex', 'display: flex;'], ['justify-content', 'justify-content: ' + C + 'center;'],
+      ['align-items', 'align-items: ' + C + 'center;'], ['flex-direction', 'flex-direction: ' + C + 'column;'],
+      ['flex-wrap', 'flex-wrap: wrap;'], ['gap', 'gap: ' + C + '16px;'], ['display: grid', 'display: grid;'],
+      ['grid-template-columns', 'grid-template-columns: repeat(' + C + '3, 1fr);'], ['центр через grid', 'display: grid;\nplace-items: center;']
+    ]],
+    ['Размеры и отступы', [
+      ['width', 'width: ' + C + ';'], ['max-width', 'max-width: ' + C + 'px;'], ['height', 'height: ' + C + ';'],
+      ['padding', 'padding: ' + C + '16px;'], ['margin', 'margin: ' + C + '0 auto;'], ['box-sizing', 'box-sizing: border-box;']
+    ]],
+    ['Оформление', [
+      ['color', 'color: ' + C + ';'], ['background', 'background: ' + C + ';'], ['font-size', 'font-size: ' + C + '16px;'],
+      ['font-weight', 'font-weight: ' + C + '700;'], ['font-family', 'font-family: ' + C + 'system-ui, sans-serif;'],
+      ['text-align', 'text-align: ' + C + 'center;'], ['border', 'border: 1px solid ' + C + '#ddd;'],
+      ['border-radius', 'border-radius: ' + C + '8px;'], ['box-shadow', 'box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1)' + C + ';'],
+      ['transition', 'transition: all 0.2s' + C + ';'], ['cursor: pointer', 'cursor: pointer;']
+    ]],
+    ['Позиция', [
+      ['position: relative', 'position: relative;'], ['position: absolute', 'position: absolute;\ntop: ' + C + '0;\nleft: 0;'],
+      ['position: sticky', 'position: sticky;\ntop: 0;'], ['z-index', 'z-index: ' + C + '10;']
+    ]]
+  ],
+  js: [
+    ['Элементы страницы', [
+      ['querySelector', "const " + C + "el = document.querySelector('');"],
+      ['querySelectorAll', "const items = document.querySelectorAll('" + C + "');"],
+      ['addEventListener', C + "el.addEventListener('click', () => {\n  \n});"],
+      ['textContent', '.textContent = ' + C + ';'], ['classList.toggle', ".classList.toggle('" + C + "');"],
+      ['style', '.style.' + C + ' = ;']
+    ]],
+    ['Основы', [
+      ['console.log', 'console.log(' + C + ');'], ['const', 'const ' + C + ' = ;'], ['let', 'let ' + C + ' = ;'],
+      ['function', 'function ' + C + 'name() {\n  \n}'], ['стрелочная', 'const ' + C + 'name = () => {\n  \n};'],
+      ['if', 'if (' + C + ') {\n  \n}'], ['if / else', 'if (' + C + ') {\n  \n} else {\n  \n}'],
+      ['for', 'for (let i = 0; i < ' + C + '; i++) {\n  \n}'], ['forEach', '.forEach((item) => {\n  ' + C + '\n});']
+    ]],
+    ['Время', [
+      ['setTimeout', 'setTimeout(() => {\n  ' + C + '\n}, 1000);'], ['setInterval', 'setInterval(() => {\n  ' + C + '\n}, 1000);']
+    ]]
+  ]
+};
+
+/* ---------- state ---------- */
+const FILES = { html: 'index.html', css: 'style.css', js: 'script.js' };
+function normProject(id, p) {
+  if (!p || typeof p !== 'object') return null;
+  return {
+    id,
+    name: typeof p.name === 'string' && p.name.trim() ? p.name.slice(0, 80) : 'Без названия',
+    html: typeof p.html === 'string' ? p.html : '',
+    css: typeof p.css === 'string' ? p.css : '',
+    js: typeof p.js === 'string' ? p.js : '',
+    createdAt: +p.createdAt || 0,
+    updatedAt: +p.updatedAt || 0
+  };
+}
+const projects = {};
+{
+  const raw = store.get('hp.projects', {});
+  if (raw && typeof raw === 'object') for (const id in raw) { const p = normProject(id, raw[id]); if (p) projects[id] = p; }
+}
+const deleted = Object.assign({}, store.get('hp.deleted', {}));
+const images = {};
+function normImage(id, im) {
+  if (!im || typeof im.dataUrl !== 'string' || im.dataUrl.indexOf('data:image/') !== 0) return null;
+  return { id, projectId: String(im.projectId || ''), name: String(im.name || 'image'), dataUrl: im.dataUrl, updatedAt: +im.updatedAt || 0 };
+}
+for (const id of (store.get('hp.imgidx', []) || [])) { const im = normImage(id, store.get('hp.img.' + id, null)); if (im) images[id] = im; }
+const settings = Object.assign(
+  { fontSize: 16, view: null, split: 0.5, autorun: true, device: 'auto', consoleOpen: false, tip: true },
+  store.get('hp.settings', {})
+);
+let currentId = store.get('hp.current', null);
+let tab = ['html', 'css', 'js'].includes(store.get('hp.tab', 'html')) ? store.get('hp.tab', 'html') : 'html';
+const views = {};
+
+const byRecent = (a, b) => (b.updatedAt - a.updatedAt) || (b.createdAt - a.createdAt) || a.name.localeCompare(b.name);
+function fromTemplate(key, id, name, ts) {
+  const t = TPL[key];
+  return { id, name, html: t.html, css: t.css, js: t.js, createdAt: ts, updatedAt: ts };
+}
+function ensureProject() {
+  if (!Object.keys(projects).length) {
+    if (!deleted.primer) projects.primer = fromTemplate('card', 'primer', 'Пример: карточка профиля', 0);
+    else { const id = newId(); projects[id] = fromTemplate('blank', id, 'Мой проект', 0); }
+  }
+  if (!projects[currentId]) currentId = Object.values(projects).sort(byRecent)[0].id;
+}
+const cur = () => projects[currentId];
+const imgsOf = pid => Object.values(images).filter(i => i.projectId === pid).sort((a, b) => a.name.localeCompare(b.name));
+const saveSettings = () => { try { localStorage.setItem('hp.settings', JSON.stringify(settings)); } catch (e) { /* ignore */ } };
+let warnedQuota = false;
+function saveLocal() {
+  const ok = store.set('hp.projects', projects);
+  store.set('hp.current', currentId);
+  if (!ok && !warnedQuota) { warnedQuota = true; toast('Браузер не даёт сохранить локально: место закончилось'); }
+}
+function saveImgLocal(im) {
+  const ok = store.set('hp.img.' + im.id, { projectId: im.projectId, name: im.name, dataUrl: im.dataUrl, updatedAt: im.updatedAt });
+  store.set('hp.imgidx', Object.keys(images));
+  return ok;
+}
+function delImgLocal(id) { store.del('hp.img.' + id); store.set('hp.imgidx', Object.keys(images)); }
+
+/* ---------- sync: Claude account (db) or Telegram CloudStorage ---------- */
+const cloud = { kind: null, write: null, synced: false, canWrite: true, mode: 'connecting', remote: {}, timer: 0 };
+const cw = { busy: {}, next: {} };
+const saveTimers = {};
+let downloads = null;
+
+function projectBody(p) { return { kind: 'project', name: p.name, html: p.html, css: p.css, js: p.js, createdAt: p.createdAt, updatedAt: p.updatedAt }; }
+function imageBody(im) { return { kind: 'image', projectId: im.projectId, name: im.name, dataUrl: im.dataUrl, updatedAt: im.updatedAt }; }
+function tombBody(id) { return { kind: 'tombstone', updatedAt: deleted[id] || Date.now() }; }
+function docBody(id) {
+  if (projects[id]) return projectBody(projects[id]);
+  if (images[id]) return imageBody(images[id]);
+  return tombBody(id);
+}
+const pendingLocal = id => !!(saveTimers[id] || cw.busy[id] || cw.next[id]);
+async function withRetry(fn) {
+  try { return await fn(); }
+  catch (e) {
+    if (e && e.code === 'unavailable') { await new Promise(r => setTimeout(r, 400 + Math.random() * 900)); return fn(); }
+    throw e;
+  }
+}
+function cloudPut(id) {
+  if (!cloud.write || !cloud.canWrite) return;
+  if (cloud.kind === 'tg' && id.indexOf('img-') === 0) return; // Telegram cloud holds code only
+  cw.next[id] = true;
+  if (!cw.busy[id]) pump(id);
+}
+async function pump(id) {
+  if (!cw.next[id] || !cloud.write) { delete cw.next[id]; refreshSync(); return; }
+  delete cw.next[id];
+  cw.busy[id] = true; refreshSync();
+  const body = docBody(id);
+  if (cloud.kind === 'claude' && JSON.stringify(body).length > 250000) {
+    toast('«' + (body.name || id) + '» больше 250 КБ, поэтому хранится только на этом устройстве');
+  } else {
+    try { await withRetry(() => cloud.write(id, body)); cloud.remote[id] = body.updatedAt; }
+    catch (err) { onCloudError(err); }
+  }
+  delete cw.busy[id];
+  if (cw.next[id]) pump(id); else refreshSync();
+}
+function onCloudError(err) {
+  const code = err && err.code;
+  if (code === 'quota_exceeded' || code === 'tg_space') toast('Облако заполнено: удалите старые проекты');
+  else if (code === 'invalid_argument') { cloud.canWrite = false; toast('Сохранять в аккаунт не получается, проекты остаются на устройстве'); }
+  else if (['revoked', 'not_granted', 'capability_disabled', 'capability_removed'].includes(code)) { cloud.write = null; cloud.mode = 'local'; }
+  else cloud.mode = 'offline';
+  refreshSync();
+}
+function markDirty(id) {
+  clearTimeout(saveTimers[id]);
+  saveTimers[id] = setTimeout(() => { delete saveTimers[id]; persist(id); }, 700);
+  refreshSync();
+}
+function persist(id) { saveLocal(); cloudPut(id); refreshSync(); }
+function flushAll() {
+  for (const id of Object.keys(saveTimers)) { clearTimeout(saveTimers[id]); delete saveTimers[id]; persist(id); }
+  saveLocal();
+}
+function refreshSync() {
+  const s = $('#status');
+  const pending = Object.keys(saveTimers).length || Object.keys(cw.busy).length || Object.keys(cw.next).length;
+  let state, text;
+  if (!cloud.write || !cloud.canWrite) {
+    state = cloud.mode === 'connecting' ? 'connecting' : 'local';
+    text = state === 'connecting' ? 'Подключение…' : 'Сохранено на устройстве';
+  } else if (pending) { state = 'saving'; text = 'Сохраняю…'; }
+  else if (cloud.mode === 'offline') { state = 'offline'; text = 'Нет связи, копия на устройстве'; }
+  else if (!cloud.synced) { state = 'connecting'; text = 'Подключение…'; }
+  else { state = 'saved'; text = cloud.kind === 'tg' ? 'Сохранено в Telegram' : 'Сохранено в аккаунте'; }
+  s.dataset.state = state; s.textContent = text; s.title = text;
+}
+function afterMerge(listChanged, curChanged, imgChanged) {
+  if (listChanged) store.set('hp.deleted', deleted);
+  if (listChanged || curChanged) {
+    const before = currentId;
+    ensureProject();
+    const p = cur();
+    if (p && p.updatedAt === 0) { // still on the untouched example: jump to the newest real project
+      const best = Object.values(projects).sort(byRecent)[0];
+      if (best && best.updatedAt > 0) currentId = best.id;
+    }
+    saveLocal();
+    if (curChanged || before !== currentId) { lastScrollY = 0; loadEditor(); runPreview(); }
+    updateHeader();
+  }
+  if (imgChanged && !curChanged) schedulePreview();
+  refreshSync();
+}
+function uploadLocal() {
+  for (const id in projects) {
+    const p = projects[id];
+    if (p.updatedAt > 0 && (cloud.remote[id] || 0) < p.updatedAt) cloudPut(id);
+  }
+  if (cloud.kind === 'claude') for (const id in images) if (cloud.remote[id] === undefined) cloudPut(id);
+  for (const id in deleted) if (cloud.remote[id] !== undefined && cloud.remote[id] < deleted[id]) cloudPut(id);
+}
+
+/* Claude account */
+let connectTries = 0;
+async function connect() {
+  if (TG) { tgStart(); return; }
+  const Cl = window.claude;
+  if (!Cl || typeof Cl.use !== 'function') {
+    if (++connectTries < 5) { setTimeout(connect, 1000); return; }
+    cloud.mode = 'local'; refreshSync(); return;
+  }
+  Cl.use('downloads').then(d => { downloads = d || null; }).catch(() => {});
+  try {
+    const [db, user] = await Promise.all([Cl.use('db'), Cl.use('user')]);
+    const uid = db && user ? await user.id() : null;
+    if (!db || !uid) { cloud.mode = 'local'; refreshSync(); return; }
+    const col = db.collection('data/users/' + uid);
+    cloud.kind = 'claude';
+    cloud.write = (id, body) => col.doc(id).set(body);
+    cloud.mode = 'connecting'; refreshSync();
+    cloud.timer = setTimeout(() => { if (!cloud.synced) { cloud.mode = 'offline'; refreshSync(); } }, 10000);
+    col.onSnapshot(onSnap, err => { clearTimeout(cloud.timer); onCloudError(err || { code: 'unavailable' }); });
+  } catch (e) { cloud.mode = 'local'; refreshSync(); }
+}
+function onSnap(snap) {
+  let curChanged = false, listChanged = false, imgChanged = false;
+  for (const ch of snap.docChanges()) {
+    if (ch.type === 'removed') continue;
+    const d = ch.doc, id = d.id, b = d.data() || {}, ts = +b.updatedAt || 0;
+    cloud.remote[id] = ts;
+    if (b.kind === 'project') {
+      if (deleted[id] && deleted[id] >= ts) continue;
+      const L = projects[id];
+      if (L && L.updatedAt >= ts) continue;
+      if (L && id === currentId && pendingLocal(id)) continue;
+      const p = normProject(id, b); if (!p) continue;
+      projects[id] = p; listChanged = true;
+      if (id === currentId) curChanged = true;
+    } else if (b.kind === 'image') {
+      if (deleted[id] && deleted[id] >= ts) continue;
+      if (images[id] && images[id].updatedAt >= ts) continue;
+      const im = normImage(id, b); if (!im) continue;
+      images[id] = im; saveImgLocal(im);
+      if (im.projectId === currentId) imgChanged = true;
+    } else if (b.kind === 'tombstone') {
+      if (projects[id] && projects[id].updatedAt <= ts) {
+        delete projects[id]; deleted[id] = ts; listChanged = true;
+        if (id === currentId) curChanged = true;
+      }
+      if (images[id] && images[id].updatedAt <= ts) {
+        if (images[id].projectId === currentId) imgChanged = true;
+        delete images[id]; delImgLocal(id);
+      }
+    }
+  }
+  if (!snap.metadata.fromCache) {
+    clearTimeout(cloud.timer);
+    cloud.mode = 'cloud';
+    if (!cloud.synced) { cloud.synced = true; uploadLocal(); }
+  }
+  afterMerge(listChanged, curChanged, imgChanged);
+}
+
+/* Telegram: DeviceStorage keeps a local copy, CloudStorage syncs code between devices */
+const tg = { keys: new Set(), index: { p: {}, d: {} }, q: Promise.resolve() };
+function tgQueue(fn) { const r = tg.q.then(fn, fn); tg.q = r.catch(() => {}); return r; }
+function cs(method, ...args) {
+  return new Promise((res, rej) => {
+    try { TG.CloudStorage[method](...args, (err, val) => { if (err) rej({ code: 'tg', message: String(err) }); else res(val); }); }
+    catch (e) { rej({ code: 'tg', message: String(e) }); }
+  });
+}
+function chunkKeys(prefix) { const out = []; for (let i = 0; tg.keys.has(prefix + i); i++) out.push(prefix + i); return out; }
+async function csGetJoined(prefix) {
+  const ks = chunkKeys(prefix);
+  if (!ks.length) return null;
+  const vals = await cs('getItems', ks);
+  return ks.map(k => (vals && vals[k]) || '').join('');
+}
+async function csSetChunks(prefix, str) {
+  const parts = [];
+  for (let i = 0; i < str.length; i += 4000) parts.push(str.slice(i, i + 4000));
+  if (!parts.length) parts.push('');
+  const extra = parts.length - chunkKeys(prefix).length;
+  if (tg.keys.size + Math.max(0, extra) > 1000) throw { code: 'tg_space' };
+  for (let i = 0; i < parts.length; i++) { await cs('setItem', prefix + i, parts[i]); tg.keys.add(prefix + i); }
+  const stale = [];
+  for (let i = parts.length; tg.keys.has(prefix + i); i++) stale.push(prefix + i);
+  if (stale.length) { await cs('removeItems', stale); stale.forEach(k => tg.keys.delete(k)); }
+}
+async function csRemoveChunks(prefix) {
+  const ks = chunkKeys(prefix);
+  if (ks.length) { await cs('removeItems', ks); ks.forEach(k => tg.keys.delete(k)); }
+}
+async function tgPull() {
+  const keys = await cs('getKeys');
+  tg.keys = new Set(Array.isArray(keys) ? keys : []);
+  let idx = { p: {}, d: {} };
+  const raw = await csGetJoined('ix_');
+  if (raw) { try { const j = JSON.parse(raw); if (j && typeof j === 'object') idx = { p: j.p || {}, d: j.d || {} }; } catch (e) { /* keep empty */ } }
+  tg.index = idx;
+  let listChanged = false, curChanged = false;
+  for (const id in idx.d) {
+    const ts = +idx.d[id] || 0;
+    cloud.remote[id] = Math.max(cloud.remote[id] || 0, ts);
+    if (projects[id] && projects[id].updatedAt <= ts && !(id === currentId && pendingLocal(id))) {
+      delete projects[id]; deleted[id] = Math.max(deleted[id] || 0, ts); listChanged = true;
+      if (id === currentId) curChanged = true;
+    }
+  }
+  for (const id in idx.p) {
+    const ts = +idx.p[id] || 0;
+    cloud.remote[id] = ts;
+    if (deleted[id] && deleted[id] >= ts) continue;
+    const L = projects[id];
+    if (L && L.updatedAt >= ts) continue;
+    if (L && id === currentId && pendingLocal(id)) continue;
+    const s = await csGetJoined('p_' + id + '_');
+    if (!s) continue;
+    let b; try { b = JSON.parse(s); } catch (e) { continue; }
+    const p = normProject(id, b); if (!p) continue;
+    projects[id] = p; listChanged = true;
+    if (id === currentId) curChanged = true;
+  }
+  afterMerge(listChanged, curChanged, false);
+}
+async function tgWrite(id, body) {
+  if (body.kind === 'project') {
+    await csSetChunks('p_' + id + '_', JSON.stringify(body));
+    tg.index.p[id] = body.updatedAt; delete tg.index.d[id];
+  } else if (body.kind === 'tombstone') {
+    await csRemoveChunks('p_' + id + '_');
+    delete tg.index.p[id]; tg.index.d[id] = body.updatedAt;
+  } else return;
+  const cutoff = Date.now() - 90 * 864e5;
+  for (const k in tg.index.d) if (tg.index.d[k] < cutoff) delete tg.index.d[k];
+  await csSetChunks('ix_', JSON.stringify(tg.index));
+}
+async function loadFromDevice() {
+  if (!DS) return;
+  const [pr, del, idx, curId] = await Promise.all([dsGet('hp.projects'), dsGet('hp.deleted'), dsGet('hp.imgidx'), dsGet('hp.current')]);
+  let listChanged = false, curChanged = false, imgChanged = false;
+  if (del && typeof del === 'object') for (const id in del) {
+    const ts = +del[id] || 0;
+    if ((deleted[id] || 0) < ts) deleted[id] = ts;
+    if (projects[id] && projects[id].updatedAt <= ts) { delete projects[id]; listChanged = true; if (id === currentId) curChanged = true; }
+  }
+  if (pr && typeof pr === 'object') for (const id in pr) {
+    const p = normProject(id, pr[id]); if (!p) continue;
+    if (deleted[id] && deleted[id] >= p.updatedAt) continue;
+    if (!projects[id] || projects[id].updatedAt < p.updatedAt) { projects[id] = p; listChanged = true; if (id === currentId) curChanged = true; }
+  }
+  if (Array.isArray(idx)) for (const id of idx) {
+    if (images[id] || deleted[id]) continue;
+    const im = normImage(id, await dsGet('hp.img.' + id));
+    if (im) { images[id] = im; if (im.projectId === currentId) imgChanged = true; listChanged = true; }
+  }
+  if (curId && projects[curId] && cur() && cur().updatedAt === 0 && curId !== currentId) { currentId = curId; curChanged = true; }
+  if (listChanged || curChanged || imgChanged) afterMerge(listChanged, curChanged, imgChanged);
+}
+async function tgStart() {
+  try { await loadFromDevice(); } catch (e) { /* local copy stays */ }
+  if (!tgAt('6.9') || !TG.CloudStorage) { cloud.mode = 'local'; refreshSync(); return; }
+  cloud.kind = 'tg';
+  cloud.write = (id, body) => tgQueue(() => tgWrite(id, body));
+  cloud.mode = 'connecting'; refreshSync();
+  cloud.timer = setTimeout(() => { if (!cloud.synced) { cloud.mode = 'offline'; refreshSync(); } }, 10000);
+  try {
+    await tgQueue(tgPull);
+    clearTimeout(cloud.timer);
+    cloud.mode = 'cloud';
+    if (!cloud.synced) { cloud.synced = true; uploadLocal(); }
+  } catch (e) { clearTimeout(cloud.timer); cloud.mode = 'offline'; }
+  refreshSync();
+  try { TG.onEvent('activated', () => { if (cloud.synced) tgQueue(tgPull).then(refreshSync, () => {}); }); } catch (e) { /* older clients */ }
+}
+
+/* ---------- editor ---------- */
+const ta = $('#code'), hl = $('#hl'), pre = $('#hlPre'), editorBox = $('#editor');
+const VOID = new Set('area base br col embed hr img input link meta param source track wbr'.split(' '));
+const TAGS = new Set(('a abbr address article aside audio b blockquote body br button canvas caption code col dd details dialog div dl dt em ' +
+  'fieldset figcaption figure footer form h1 h2 h3 h4 h5 h6 head header hr html i iframe img input label legend li link main mark meta nav ' +
+  'ol optgroup option output p picture pre progress q s script section select small source span strong style sub summary sup svg table tbody ' +
+  'td template textarea tfoot th thead time title tr u ul video').split(' '));
+let curLine = -1, hitLine = -1, digits = 2;
+
+function splitLines(html) {
+  const lines = [], stack = [];
+  let line = '';
+  const re = /(<span[^>]*>)|(<\/span>)|([^<]+)/g;
+  let m;
+  while ((m = re.exec(html))) {
+    if (m[1]) { stack.push(m[1]); line += m[1]; }
+    else if (m[2]) { stack.pop(); line += m[2]; }
+    else {
+      const parts = m[3].split('\n');
+      for (let i = 0; i < parts.length; i++) {
+        if (i > 0) { line += '</span>'.repeat(stack.length); lines.push(line); line = stack.join(''); }
+        line += parts[i];
+      }
+    }
+  }
+  lines.push(line);
+  return lines;
+}
+function renderHL() {
+  const code = ta.value;
+  const lang = tab === 'html' ? 'markup' : (tab === 'css' ? 'css' : 'javascript');
+  let out = null;
+  const P = window.Prism;
+  if (P && typeof P.highlight === 'function' && P.languages && P.languages[lang]) {
+    try { out = P.highlight(code, P.languages[lang], lang); } catch (e) { out = null; }
+  }
+  if (out == null) out = esc(code);
+  const lines = splitLines(out);
+  hl.innerHTML = lines.map(l => '<span class="ln">' + (l === '' || /^(<span[^>]*>)*(<\/span>)*$/.test(l) ? l + ' ' : l) + '</span>').join('');
+  const d = Math.max(2, String(lines.length).length);
+  if (d !== digits) { digits = d; editorBox.style.setProperty('--digits', d); }
+  curLine = -1;
+  markLines();
+  syncScroll();
+}
+window.__hpPrism = renderHL;
+let hlRaf = 0;
+function scheduleHL() { if (!hlRaf) hlRaf = requestAnimationFrame(() => { hlRaf = 0; renderHL(); }); }
+function syncScroll() { pre.scrollTop = ta.scrollTop; pre.scrollLeft = ta.scrollLeft; }
+const lineOf = pos => { let n = 0, i = -1; while ((i = ta.value.indexOf('\n', i + 1)) !== -1 && i < pos) n++; return n; };
+function markLines() {
+  const want = lineOf(ta.selectionStart || 0);
+  if (want !== curLine) {
+    const a = hl.children[curLine]; if (a) a.classList.remove('cur');
+    const b = hl.children[want]; if (b) b.classList.add('cur');
+    curLine = want;
+  }
+  const h = hl.children[hitLine]; if (h && !h.classList.contains('hit')) h.classList.add('hit');
+}
+function clearHit() { const h = hl.children[hitLine]; if (h) h.classList.remove('hit'); hitLine = -1; }
+function revealLine(idx, hit) {
+  const ln = hl.children[idx]; if (!ln) return;
+  const top = ln.offsetTop;
+  if (top < ta.scrollTop + 8 || top > ta.scrollTop + ta.clientHeight - 48) { ta.scrollTop = Math.max(0, top - ta.clientHeight / 3); syncScroll(); }
+  if (hit) { clearHit(); hitLine = idx; ln.classList.add('hit'); }
+}
+
+function rememberView() {
+  if (!cur()) return;
+  views[currentId + ':' + tab] = { s: ta.selectionStart, e: ta.selectionEnd, top: ta.scrollTop };
+}
+function loadEditor() {
+  const p = cur();
+  ta.value = p ? p[tab] : '';
+  hitLine = -1;
+  const v = views[currentId + ':' + tab];
+  if (v) {
+    const n = ta.value.length;
+    try { ta.setSelectionRange(Math.min(v.s, n), Math.min(v.e, n)); } catch (e) { /* ignore */ }
+  } else { try { ta.setSelectionRange(0, 0); } catch (e) { /* ignore */ } }
+  renderHL();
+  ta.scrollTop = v ? v.top : 0;
+  syncScroll();
+  $$('.tabs [role="tab"]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === tab)));
+  ta.setAttribute('aria-label', 'Код файла ' + FILES[tab]);
+  const ck = $('#closeKey'); if (ck) ck.hidden = tab !== 'html';
+  if (!$('#findbar').hidden) updateFindCount();
+  updatePos();
+}
+function setTab(t) {
+  if (t === tab) return;
+  rememberView();
+  tab = t; try { localStorage.setItem('hp.tab', JSON.stringify(t)); } catch (e) { /* ignore */ }
+  loadEditor();
+}
+function commit() {
+  const p = cur(); if (!p) return;
+  scheduleHL();
+  if (p[tab] === ta.value) return;
+  p[tab] = ta.value;
+  p.updatedAt = Date.now();
+  if (!p.createdAt) p.createdAt = p.updatedAt;
+  markDirty(p.id);
+  schedulePreview();
+  updatePos();
+}
+let inInsert = 0;
+function insertAt(text, start, end, caret) {
+  if (document.activeElement !== ta) ta.focus({ preventScroll: true });
+  ta.setSelectionRange(start, end);
+  let ok = false;
+  inInsert++;
+  try { ok = document.execCommand('insertText', false, text); } catch (e) { ok = false; }
+  inInsert--;
+  if (!ok || ta.value.slice(start, start + text.length) !== text) {
+    ta.setRangeText(text, start, end, 'end');
+    commit();
+  }
+  const c = start + (caret == null ? text.length : caret);
+  ta.setSelectionRange(c, c);
+  scheduleHL();
+  updatePos();
+}
+function lineIndent(pos) {
+  const v = ta.value, ls = v.lastIndexOf('\n', pos - 1) + 1;
+  return /^[ \t]*/.exec(v.slice(ls, pos))[0];
+}
+function insertSnippet(snippet, start, end) {
+  const indent = lineIndent(start);
+  const s = snippet.split('\n').join('\n' + indent);
+  const i = s.indexOf(C);
+  insertAt(s.replace(C, ''), start, end, i < 0 ? null : i);
+}
+const inTag = pos => { const b = ta.value.slice(0, pos); return b.lastIndexOf('<') > b.lastIndexOf('>'); };
+
+function autoClose() {
+  const s = ta.selectionStart; if (s !== ta.selectionEnd) return;
+  const before = ta.value.slice(Math.max(0, s - 400), s);
+  if (/\/>$/.test(before)) return;
+  const m = /<([a-zA-Z][a-zA-Z0-9-]*)(?:\s[^<>]*)?>$/.exec(before);
+  if (!m) return;
+  const name = m[1];
+  if (VOID.has(name.toLowerCase())) return;
+  const closing = '</' + name + '>';
+  if (ta.value.slice(s, s + closing.length).toLowerCase() === closing.toLowerCase()) return;
+  insertAt(closing, s, s, 0);
+}
+function openTagsBefore(text) {
+  const stack = [];
+  const re = /<(\/?)([a-zA-Z][\w-]*)\b[^<>]*?(\/?)>/g;
+  text = text.replace(/<!--[\s\S]*?-->/g, '');
+  let m;
+  while ((m = re.exec(text))) {
+    const name = m[2].toLowerCase();
+    if (m[1]) { const i = stack.lastIndexOf(name); if (i >= 0) stack.length = i; }
+    else if (!m[3] && !VOID.has(name)) stack.push(name);
+  }
+  return stack;
+}
+function closeTag() {
+  const s = ta.selectionStart;
+  const st = openTagsBefore(ta.value.slice(0, s));
+  if (!st.length) { toast('Незакрытых тегов нет'); return; }
+  insertAt('</' + st[st.length - 1] + '>', s, ta.selectionEnd);
+}
+function tryExpand() {
+  if (tab !== 'html') return false;
+  const s = ta.selectionStart; if (s !== ta.selectionEnd) return false;
+  const v = ta.value, ls = v.lastIndexOf('\n', s - 1) + 1, line = v.slice(ls, s);
+  const indent = /^[ \t]*/.exec(line)[0];
+  if (/^\s*!$/.test(line)) { insertSnippet(BOILERPLATE, s - 1, s); return true; }
+  const m = /(?:^|[\s>(])([a-zA-Z][a-zA-Z0-9]*)?((?:[.#][a-zA-Z_][\w-]*)*)(?:\*(\d{1,2}))?$/.exec(line);
+  if (!m) return false;
+  const tagRaw = m[1] || '', rest = m[2] || '';
+  if (!tagRaw && !rest) return false;
+  const tag = (tagRaw || 'div').toLowerCase();
+  if (!TAGS.has(tag)) return false;
+  if (inTag(s - (tagRaw.length + rest.length))) return false;
+  const times = m[3] ? Math.min(+m[3], 30) : 1;
+  const abbrLen = tagRaw.length + rest.length + (m[3] ? m[3].length + 1 : 0);
+  const ids = [], classes = [];
+  rest.replace(/([.#])([\w-]+)/g, (_, k, val) => { (k === '.' ? classes : ids).push(val); return ''; });
+  let attrs = '';
+  if (ids.length) attrs += ' id="' + ids[0] + '"';
+  if (classes.length) attrs += ' class="' + classes.join(' ') + '"';
+  let one;
+  if (tag === 'a') one = '<a href="' + C + '"' + attrs + '></a>';
+  else if (tag === 'img') one = '<img src="' + C + '" alt=""' + attrs + '>';
+  else if (tag === 'link') one = '<link rel="stylesheet" href="style.css' + C + '">';
+  else if (tag === 'input') one = '<input type="text" name="' + C + '"' + attrs + '>';
+  else if (tag === 'script') one = '<script src="script.js' + C + '"><\/script>';
+  else if (VOID.has(tag)) one = '<' + tag + attrs + '>' + C;
+  else one = '<' + tag + attrs + '>' + C + '</' + tag + '>';
+  let snippet = one;
+  if (times > 1) snippet = one + ('\n' + one.replace(C, '')).repeat(times - 1);
+  insertSnippet(snippet, s - abbrLen, s);
+  return true;
+}
+function selectedLineRange() {
+  const v = ta.value; const s = ta.selectionStart; let e = ta.selectionEnd;
+  if (e > s && v[e - 1] === '\n') e--;
+  const ls = v.lastIndexOf('\n', s - 1) + 1;
+  let le = v.indexOf('\n', e); if (le < 0) le = v.length;
+  return [ls, le];
+}
+function indentLines(outdent) {
+  const [ls, le] = selectedLineRange();
+  const block = ta.value.slice(ls, le);
+  const out = block.split('\n').map(l => outdent ? l.replace(/^( {1,2}|\t)/, '') : '  ' + l).join('\n');
+  if (out === block) return;
+  insertAt(out, ls, le);
+  ta.setSelectionRange(ls, ls + out.length);
+}
+function toggleComment() {
+  const [ls, le] = selectedLineRange();
+  const block = ta.value.slice(ls, le);
+  let out;
+  if (tab === 'js') {
+    const lines = block.split('\n');
+    const filled = lines.filter(l => l.trim());
+    const all = filled.length && filled.every(l => /^\s*\/\//.test(l));
+    const minIndent = Math.min(...filled.map(l => /^\s*/.exec(l)[0].length).concat([1e9]));
+    out = lines.map(l => {
+      if (!l.trim()) return l;
+      return all ? l.replace(/^(\s*)\/\/ ?/, '$1') : l.slice(0, minIndent) + '// ' + l.slice(minIndent);
+    }).join('\n');
+  } else {
+    const open = tab === 'html' ? '<!--' : '/*', close = tab === 'html' ? '-->' : '*/';
+    const t = block.trim();
+    const lead = /^\s*/.exec(block)[0];
+    if (t.indexOf(open) === 0 && t.slice(-close.length) === close) out = lead + t.slice(open.length, t.length - close.length).trim();
+    else out = lead + open + ' ' + block.slice(lead.length) + ' ' + close;
+  }
+  insertAt(out, ls, le);
+  ta.setSelectionRange(ls, ls + out.length);
+}
+function reindent(text, kind) {
+  const lines = text.split('\n');
+  const out = [];
+  let depth = 0, raw = null;
+  const braces = (line) => {
+    const clean = line.replace(/(["'`])(?:\\.|(?!\1).)*\1/g, '""').replace(/\/\/.*$/, '').replace(/\/\*.*?\*\//g, '');
+    let delta = 0;
+    for (const ch of clean) { if ('{(['.includes(ch)) delta++; else if ('})]'.includes(ch)) delta--; }
+    const lead = /^[})\]]+/.exec(clean.trim());
+    return { delta, lead: lead ? lead[0].length : 0 };
+  };
+  for (const r of lines) {
+    const line = r.trim();
+    if (!line) { out.push(''); continue; }
+    let delta = 0, lead = 0;
+    if (kind !== 'html' || raw) {
+      if (raw && new RegExp('^</' + raw + '\\s*>', 'i').test(line)) { lead = 1; delta = -1; raw = null; }
+      else { const b = braces(line); delta = b.delta; lead = b.lead; }
+    } else {
+      const tags = line.replace(/<!--.*?-->/g, '').match(/<\/?[a-zA-Z][\w-]*\b[^>]*?\/?>/g) || [];
+      for (const t of tags) {
+        const name = (/^<\/?([a-zA-Z][\w-]*)/.exec(t) || [])[1].toLowerCase();
+        if (t[1] === '/') delta--;
+        else if (!VOID.has(name) && t.slice(-2) !== '/>') delta++;
+      }
+      const ld = /^(?:<\/[a-zA-Z][\w-]*\s*>\s*)+/.exec(line);
+      lead = ld ? (ld[0].match(/<\//g) || []).length : 0;
+      const open = /<(script|style)\b[^>]*>(?![\s\S]*<\/\1>)/i.exec(line);
+      if (open && !/<script\b[^>]*\bsrc=/i.test(open[0])) raw = open[1].toLowerCase();
+    }
+    out.push('  '.repeat(Math.max(0, depth - lead)) + line);
+    depth = Math.max(0, depth + delta);
+  }
+  return out.join('\n');
+}
+function formatCurrent() {
+  const v = ta.value;
+  const out = reindent(v, tab);
+  if (out === v) { toast('Отступы уже ровные'); return; }
+  const top = ta.scrollTop;
+  insertAt(out, 0, v.length, 0);
+  ta.scrollTop = top; syncScroll();
+  toast('Отступы выровнены');
+}
+function smartEnter() {
+  const v = ta.value, s = ta.selectionStart, e = ta.selectionEnd;
+  const ls = v.lastIndexOf('\n', s - 1) + 1;
+  const before = v.slice(ls, s), after = v.slice(e);
+  const indent = /^[ \t]*/.exec(before)[0];
+  const unit = '  ';
+  let opens = false, closesNext = false;
+  if (tab === 'html') {
+    const m = /<([a-zA-Z][\w-]*)(?:\s[^<>]*)?>$/.exec(before);
+    opens = !!m && !/\/>$/.test(before) && !VOID.has(m[1].toLowerCase());
+    closesNext = opens && /^<\//.test(after);
+  }
+  if (!opens && /[{(\[]\s*$/.test(before)) { opens = true; closesNext = /^\s*[})\]]/.test(after); }
+  if (opens && closesNext) insertAt('\n' + indent + unit + '\n' + indent, s, e, 1 + indent.length + unit.length);
+  else if (opens) insertAt('\n' + indent + unit, s, e);
+  else insertAt('\n' + indent, s, e);
+}
+function codeContext(pos) {
+  const v = ta.value;
+  if (tab === 'html') return inTag(pos);
+  const ls = v.lastIndexOf('\n', pos - 1) + 1;
+  const line = v.slice(ls, pos);
+  const dq = (line.match(/(^|[^\\])"/g) || []).length, sq = (line.match(/(^|[^\\])'/g) || []).length;
+  return { inString: dq % 2 === 1 || sq % 2 === 1 };
+}
+function fixSmart() {
+  const s = ta.selectionStart; if (s < 1 || s !== ta.selectionEnd) return;
+  const ch = ta.value[s - 1];
+  if (!/[“”„«»‘’‚—…]/.test(ch)) return;
+  const ctx = codeContext(s - 1);
+  if (tab === 'html' && !ctx) return;
+  const inString = typeof ctx === 'object' && ctx.inString;
+  if ('“”„'.includes(ch) || ('«»'.includes(ch) && !inString)) insertAt('"', s - 1, s);
+  else if ('‘’‚'.includes(ch)) insertAt("'", s - 1, s);
+  else if (ch === '—' && !inString) insertAt('--', s - 1, s);
+  else if (ch === '…' && !inString) insertAt('...', s - 1, s);
+}
+function updatePos() {
+  const s = ta.selectionStart || 0;
+  const before = ta.value.slice(0, s);
+  const line = lineOf(s) + 1;
+  const col = s - before.lastIndexOf('\n');
+  $('#pos').textContent = 'Стр ' + line + ' · Кол ' + col;
+  markLines();
+}
+
+ta.addEventListener('input', e => {
+  commit();
+  if (inInsert) return;
+  const type = e.inputType || '';
+  if (type.indexOf('insert') === 0) fixSmart();
+  if (tab === 'html' && type === 'insertText' && e.data === '>') autoClose();
+});
+ta.addEventListener('scroll', syncScroll, { passive: true });
+ta.addEventListener('keydown', e => {
+  if (e.isComposing || e.keyCode === 229) return;
+  const mod = e.metaKey || e.ctrlKey;
+  if (mod && e.key === 'Enter') { e.preventDefault(); runPreview(); return; }
+  if (mod && e.code === 'KeyS') { e.preventDefault(); flushAll(); toast('Сохранено'); return; }
+  if (mod && e.code === 'KeyF') { e.preventDefault(); openFind(); return; }
+  if (mod && e.code === 'Slash') { e.preventDefault(); toggleComment(); return; }
+  if (e.key === 'Tab' && !mod && !e.altKey) {
+    e.preventDefault();
+    const multi = ta.value.slice(ta.selectionStart, ta.selectionEnd).indexOf('\n') >= 0;
+    if (e.shiftKey) indentLines(true);
+    else if (multi) indentLines(false);
+    else if (!tryExpand()) insertAt('  ', ta.selectionStart, ta.selectionEnd);
+    return;
+  }
+  if (e.key === 'Enter' && !mod && !e.shiftKey && !e.altKey) { e.preventDefault(); smartEnter(); }
+});
+document.addEventListener('selectionchange', () => { if (document.activeElement === ta) updatePos(); });
+
+/* key bar */
+const KEYS = [
+  { k: 'snip', label: '＋', title: 'Вставить тег, свойство или кусок кода', cls: 'acc' },
+  { k: 'left', label: '←', title: 'Курсор влево' }, { k: 'right', label: '→', title: 'Курсор вправо' },
+  { k: 'tab', label: '⇥', title: 'Развернуть сокращение (div.card) или отступ' },
+  { k: '<' }, { k: '>' }, { k: '/' }, { k: '=' }, { k: '"' }, { k: "'" },
+  { k: 'close', label: '</>', title: 'Закрыть последний открытый тег', id: 'closeKey', cls: 'acc' },
+  { sep: true },
+  { k: '{' }, { k: '}' }, { k: '(' }, { k: ')' }, { k: '[' }, { k: ']' },
+  { k: ':' }, { k: ';' }, { k: '.' }, { k: '#' }, { k: '-' }, { k: '!' }, { k: '&' }, { k: '$' }, { k: '`' }, { k: '%' }, { k: '*' }, { k: '+' }, { k: '|' }, { k: '_' }, { k: '@' },
+  { sep: true },
+  { k: 'comment', label: '//', title: 'Закомментировать строку' },
+  { k: 'find', label: '⌕', title: 'Найти и заменить' },
+  { k: 'undo', label: '↶', title: 'Отменить' }, { k: 'redo', label: '↷', title: 'Повторить' }
+];
+function pair(a, b) {
+  const s = ta.selectionStart, e = ta.selectionEnd;
+  if (s === e && a === b && ta.value[s] === a) { ta.setSelectionRange(s + 1, s + 1); return; }
+  const sel = ta.value.slice(s, e);
+  insertAt(a + sel + b, s, e, sel ? a.length + sel.length + b.length : a.length);
+}
+function barPress(k) {
+  haptic('tick');
+  if (k === 'snip') { showSnippets(); return; }
+  if (k === 'find') { openFind(); return; }
+  if (document.activeElement !== ta) ta.focus({ preventScroll: true });
+  const s = ta.selectionStart, e = ta.selectionEnd;
+  switch (k) {
+    case 'left': { const p = s === e ? Math.max(0, s - 1) : s; ta.setSelectionRange(p, p); updatePos(); break; }
+    case 'right': { const p = s === e ? Math.min(ta.value.length, e + 1) : e; ta.setSelectionRange(p, p); updatePos(); break; }
+    case 'tab':
+      if (ta.value.slice(s, e).indexOf('\n') >= 0) indentLines(false);
+      else if (!tryExpand()) insertAt('  ', s, e);
+      break;
+    case 'close': closeTag(); break;
+    case 'comment': toggleComment(); break;
+    case 'undo': try { document.execCommand('undo'); } catch (x) { /* ignore */ } commit(); break;
+    case 'redo': try { document.execCommand('redo'); } catch (x) { /* ignore */ } commit(); break;
+    case '"': case "'": case '`': pair(k, k); break;
+    case '(': pair('(', ')'); break;
+    case '[': pair('[', ']'); break;
+    case '{': pair('{', '}'); break;
+    case ')': case ']': case '}':
+      if (s === e && ta.value[s] === k) ta.setSelectionRange(s + 1, s + 1); else insertAt(k, s, e);
+      break;
+    case '=':
+      if (tab === 'html' && inTag(s)) insertAt('=""', s, e, 2); else insertAt('=', s, e);
+      break;
+    case '>':
+      insertAt('>', s, e);
+      if (tab === 'html') autoClose();
+      break;
+    default: insertAt(k, s, e);
+  }
+}
+function bindPress(btn, fn) {
+  let sx = 0, sy = 0, moved = false, touchedAt = 0;
+  btn.addEventListener('touchstart', e => { const t = e.touches[0]; sx = t.clientX; sy = t.clientY; moved = false; }, { passive: true });
+  btn.addEventListener('touchmove', e => { const t = e.touches[0]; if (Math.abs(t.clientX - sx) > 8 || Math.abs(t.clientY - sy) > 8) moved = true; }, { passive: true });
+  btn.addEventListener('touchend', e => { if (e.cancelable) e.preventDefault(); touchedAt = Date.now(); if (!moved) fn(); }, { passive: false });
+  btn.addEventListener('mousedown', e => { e.preventDefault(); if (Date.now() - touchedAt < 800) return; fn(); });
+  btn.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fn(); } });
+}
+{
+  const bar = $('#keybar');
+  for (const item of KEYS) {
+    if (item.sep) { bar.append(el('span', { class: 'sep', 'aria-hidden': 'true' })); continue; }
+    const label = item.label || item.k;
+    const b = el('button', {
+      type: 'button', tabindex: '-1', id: item.id || null,
+      class: [item.cls, label.length > 1 && /[a-zа-я]/i.test(label) ? 'word' : null].filter(Boolean).join(' ') || null,
+      title: item.title || ('Вставить ' + item.k), 'aria-label': item.title || item.k, text: label
+    });
+    bindPress(b, () => barPress(item.k));
+    bar.append(b);
+  }
+}
+
+/* find and replace */
+const findIn = $('#findIn'), replIn = $('#replIn');
+function openFind() {
+  const fb = $('#findbar');
+  fb.hidden = false;
+  const sel = ta.value.slice(ta.selectionStart, ta.selectionEnd);
+  if (sel && sel.indexOf('\n') < 0) findIn.value = sel;
+  findIn.focus(); findIn.select();
+  updateFindCount();
+  updateBack();
+}
+function closeFind() { $('#findbar').hidden = true; clearHit(); updateBack(); }
+function matches() {
+  const q = findIn.value; if (!q) return [];
+  const v = ta.value.toLowerCase(), ql = q.toLowerCase();
+  const out = [];
+  let i = v.indexOf(ql);
+  while (i >= 0 && out.length < 5000) { out.push(i); i = v.indexOf(ql, i + ql.length); }
+  return out;
+}
+function updateFindCount(k, n) {
+  if (n == null) n = matches().length;
+  $('#findCount').textContent = !findIn.value ? '' : n ? (k ? k + '/' + n : String(n)) : 'нет';
+}
+function findGo(dir) {
+  const q = findIn.value; if (!q) return;
+  const ms = matches();
+  if (!ms.length) { updateFindCount(0, 0); clearHit(); haptic('error'); return; }
+  let k;
+  if (dir > 0) { const from = ta.selectionEnd; k = ms.findIndex(i => i >= from); if (k < 0) k = 0; }
+  else { const from = ta.selectionStart; k = -1; for (let j = ms.length - 1; j >= 0; j--) if (ms[j] < from) { k = j; break; } if (k < 0) k = ms.length - 1; }
+  const i = ms[k];
+  ta.setSelectionRange(i, i + q.length);
+  revealLine(lineOf(i), true);
+  updatePos();
+  updateFindCount(k + 1, ms.length);
+}
+function replaceOne() {
+  const q = findIn.value; if (!q) return;
+  const s = ta.selectionStart, e = ta.selectionEnd;
+  if (ta.value.slice(s, e).toLowerCase() === q.toLowerCase()) {
+    insertAt(replIn.value, s, e);
+    findIn.focus({ preventScroll: true });
+  }
+  findGo(1);
+}
+function replaceAll() {
+  const q = findIn.value; if (!q) return;
+  const ms = matches(); if (!ms.length) { updateFindCount(0, 0); return; }
+  const v = ta.value, r = replIn.value;
+  let out = '', last = 0;
+  for (const i of ms) { out += v.slice(last, i) + r; last = i + q.length; }
+  out += v.slice(last);
+  const top = ta.scrollTop;
+  insertAt(out, 0, v.length, 0);
+  ta.scrollTop = top; syncScroll();
+  clearHit(); updateFindCount();
+  toast('Заменено: ' + ms.length);
+}
+findIn.addEventListener('input', () => { clearHit(); updateFindCount(); });
+findIn.addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); findGo(e.shiftKey ? -1 : 1); }
+  else if (e.key === 'Escape') { e.preventDefault(); closeFind(); ta.focus(); }
+});
+replIn.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); replaceOne(); } });
+$('#findNext').addEventListener('click', () => findGo(1));
+$('#findPrev').addEventListener('click', () => findGo(-1));
+$('#replOne').addEventListener('click', replaceOne);
+$('#replAll').addEventListener('click', replaceAll);
+$('#findClose').addEventListener('click', closeFind);
+
+/* ---------- preview ---------- */
+const frame = $('#frame');
+let pvTimer = 0, lastScrollY = 0;
+function previewShim(JS0, Y) {
+  var P = function (type, text) { try { parent.postMessage({ __hp: 1, type: type, text: text }, '*'); } catch (e) { /* ignore */ } };
+  function fmt(a) {
+    try {
+      if (a instanceof Error) return a.name + ': ' + a.message;
+      if (a && typeof a === 'object') {
+        if (a.nodeType === 1) return '<' + a.tagName.toLowerCase() + (a.id ? '#' + a.id : '') + (typeof a.className === 'string' && a.className.trim() ? '.' + a.className.trim().split(/\s+/).join('.') : '') + '>';
+        var s = JSON.stringify(a, null, 1);
+        return s && s.length > 2000 ? s.slice(0, 2000) + '…' : String(s);
+      }
+      return String(a);
+    } catch (e) { return String(a); }
+  }
+  function join(args) { return Array.prototype.map.call(args, fmt).join(' '); }
+  ['log', 'info', 'warn', 'error', 'debug'].forEach(function (m) {
+    var o = console[m];
+    console[m] = function () { P(m === 'debug' ? 'log' : m, join(arguments)); if (o) { try { o.apply(console, arguments); } catch (e) { /* ignore */ } } };
+  });
+  console.clear = function () { P('clear', ''); };
+  console.table = function (d) { P('log', fmt(d)); };
+  window.addEventListener('error', function (e) {
+    var t = e.target;
+    if (t && t !== window && t.tagName) {
+      var src = t.currentSrc || t.src || t.href || '';
+      P('warn', 'Не загрузилось: <' + t.tagName.toLowerCase() + '> ' + src + (t.tagName === 'IMG' ? '. Добавьте файл через «Картинки» и укажите его имя.' : ''));
+      return;
+    }
+    var where = '';
+    if (e.lineno && JS0 && e.lineno >= JS0) where = ' (script.js, строка ' + (e.lineno - JS0 + 1) + ')';
+    P('error', (e.message || 'Ошибка') + where);
+  }, true);
+  window.addEventListener('unhandledrejection', function (e) { P('error', 'Promise: ' + fmt(e.reason)); });
+  window.alert = function (m) { P('info', 'alert: ' + m); };
+  window.confirm = function (m) { P('info', 'confirm: ' + m + ' → ОК'); return true; };
+  window.prompt = function (m, d) { P('info', 'prompt: ' + m); return d == null ? '' : String(d); };
+  document.addEventListener('click', function (e) {
+    var a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+    if (!a || e.defaultPrevented) return;
+    var h = a.getAttribute('href') || '';
+    if (h.charAt(0) === '#') {
+      e.preventDefault();
+      var target = h.length > 1 ? document.getElementById(decodeURIComponent(h.slice(1))) : null;
+      if (target) target.scrollIntoView({ behavior: 'smooth' }); else window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+    if (/^javascript:/i.test(h)) return;
+    e.preventDefault();
+    P('info', 'Ссылка: ' + h + '. В превью переходы отключены.');
+  });
+  document.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var out = [];
+    try { new FormData(e.target).forEach(function (v, k) { out.push(k + '=' + (typeof v === 'string' ? v : '[файл]')); }); } catch (x) { /* ignore */ }
+    P('info', 'Форма отправлена' + (out.length ? ': ' + out.join(', ') : ''));
+  }, true);
+  var t = 0;
+  window.addEventListener('scroll', function () {
+    if (t) return;
+    t = setTimeout(function () { t = 0; P('scroll', String(Math.round(window.scrollY || 0))); }, 150);
+  }, { passive: true });
+  if (Y) window.addEventListener('load', function () { window.scrollTo(0, Y); });
+}
+const SHIM_SRC = previewShim.toString();
+
+function assetMap(pid) {
+  const m = new Map();
+  for (const im of imgsOf(pid)) m.set(im.name.toLowerCase(), im.dataUrl);
+  return m;
+}
+function inlineAssets(text, pid) {
+  const map = assetMap(pid);
+  if (!map.size || !text) return text;
+  const sub = v => {
+    const clean = v.trim();
+    if (!clean || /^(data:|blob:|https?:|\/\/|#|mailto:|tel:)/i.test(clean)) return null;
+    let base = clean.split(/[?#]/)[0].split('/').pop();
+    try { base = decodeURIComponent(base); } catch (e) { /* keep */ }
+    return map.get(base.toLowerCase()) || null;
+  };
+  text = text.replace(/\b(src|href|poster)(\s*=\s*)(["'])([^"']*)\3/gi, (m, a, eq, q, v) => { const d = sub(v); return d ? a + eq + q + d + q : m; });
+  text = text.replace(/url\(\s*(["']?)([^"')]+)\1\s*\)/gi, (m, q, v) => { const d = sub(v); return d ? 'url("' + d + '")' : m; });
+  return text;
+}
+function stripLocalLinks(html) {
+  return html
+    .replace(/<link\b[^>]*\bhref\s*=\s*(["'])(?!https?:|\/\/|data:)[^"']*\.css(?:\?[^"']*)?\1[^>]*>/gi, () => '<!-- style.css: вкладка подключена автоматически -->')
+    .replace(/<script\b[^>]*\bsrc\s*=\s*(["'])(?!https?:|\/\/|data:)[^"']*\.js(?:\?[^"']*)?\1[^>]*>\s*<\/script>/gi, () => '<!-- script.js: вкладка подключена автоматически -->');
+}
+function compose(p, forExport) {
+  const html = inlineAssets(stripLocalLinks(p.html || ''), p.id);
+  const css = inlineAssets(p.css || '', p.id);
+  const js = p.js || '';
+  const style = css.trim() ? '<style>\n' + css + '\n</style>\n' : '';
+  const script = js.trim() ? (forExport ? '<script>' : '<script data-hp-user>') + '\n' + js.replace(/<\/script/gi, '<\\/script') + '\n<\/script>\n' : '';
+  const shim = forExport ? '' : '<script>(' + SHIM_SRC + ')(__JS0__,' + (lastScrollY | 0) + ');<\/script>\n';
+  let doc;
+  if (/<!doctype|<html[\s>]|<head[\s>]|<body[\s>]/i.test(html)) {
+    doc = html;
+    if (shim) {
+      if (/<head\b[^>]*>/i.test(doc)) doc = doc.replace(/<head\b[^>]*>/i, m => m + '\n' + shim);
+      else if (/<html\b[^>]*>/i.test(doc)) doc = doc.replace(/<html\b[^>]*>/i, m => m + '\n' + shim);
+      else doc = shim + doc;
+    }
+    if (style) {
+      if (/<\/head>/i.test(doc)) doc = doc.replace(/<\/head>/i, () => style + '</head>');
+      else if (/<body\b[^>]*>/i.test(doc)) doc = doc.replace(/<body\b[^>]*>/i, m => style + m);
+      else doc = style + doc;
+    }
+    if (script) {
+      const i = doc.toLowerCase().lastIndexOf('</body>');
+      doc = i >= 0 ? doc.slice(0, i) + script + doc.slice(i) : doc + '\n' + script;
+    }
+  } else {
+    doc = '<!DOCTYPE html>\n<html lang="ru">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n' +
+      shim + '<title>' + esc(p.name) + '</title>\n' + style + '</head>\n<body>\n' + html + '\n' + script + '</body>\n</html>\n';
+  }
+  if (!forExport) {
+    const at = script ? doc.indexOf('<script data-hp-user>') : -1;
+    const js0 = at < 0 ? 0 : doc.slice(0, at).split('\n').length + 1;
+    doc = doc.replace('__JS0__', () => String(js0));
+  }
+  return doc;
+}
+function setStale(on) { $('#stale').hidden = !on; }
+function schedulePreview() {
+  if (!settings.autorun) { setStale(true); return; }
+  clearTimeout(pvTimer);
+  pvTimer = setTimeout(runPreview, 450);
+}
+function runPreview() {
+  clearTimeout(pvTimer);
+  setStale(false);
+  clearLogs();
+  const p = cur(); if (!p) return;
+  frame.srcdoc = compose(p, false);
+}
+window.addEventListener('message', e => {
+  if (e.source !== frame.contentWindow) return;
+  const m = e.data;
+  if (!m || m.__hp !== 1) return;
+  if (m.type === 'scroll') { lastScrollY = parseInt(m.text, 10) || 0; return; }
+  if (m.type === 'clear') { clearLogs(); return; }
+  addLog(m.type, String(m.text));
+});
+
+/* console */
+let logCount = 0, errCount = 0;
+function clearLogs() {
+  logCount = 0; errCount = 0;
+  $('#logList').replaceChildren(el('div', { class: 'console-empty', text: 'Здесь появятся console.log, ошибки и сообщения превью.' }));
+  updateBadge();
+}
+function addLog(type, text) {
+  const list = $('#logList');
+  const empty = $('.console-empty', list); if (empty) empty.remove();
+  if (list.children.length > 300) list.firstChild.remove();
+  const cls = ['log', 'info', 'warn', 'error'].includes(type) ? type : 'log';
+  list.append(el('div', { class: 'log ' + cls, text }));
+  list.scrollTop = list.scrollHeight;
+  logCount++; if (cls === 'error') errCount++;
+  updateBadge();
+}
+function updateBadge() {
+  const b = $('#badge');
+  b.hidden = logCount === 0;
+  b.textContent = String(errCount || logCount);
+  b.classList.toggle('err', errCount > 0);
+  b.title = errCount ? errCount + ' ' + plural(errCount, 'ошибка', 'ошибки', 'ошибок') : logCount + ' ' + plural(logCount, 'сообщение', 'сообщения', 'сообщений');
+}
+function setConsole(open) {
+  settings.consoleOpen = open; saveSettings();
+  $('#console').hidden = !open;
+  $('#consoleBtn').setAttribute('aria-expanded', String(open));
+  layoutFrame();
+}
+
+/* device width */
+function layoutFrame() {
+  const box = $('#frameBox'), st = $('#stage');
+  const W = settings.device === 'auto' ? 0 : +settings.device;
+  const sw = st.clientWidth, sh = st.clientHeight;
+  $$('#devSeg button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.w === String(settings.device))));
+  if (!W || !sw) {
+    st.classList.remove('framed');
+    box.style.cssText = '';
+    $('#wread').textContent = sw ? Math.round(sw) + ' px' : '';
+    return;
+  }
+  const s = Math.min(1, (sw - 24) / W);
+  st.classList.add('framed');
+  box.style.width = W + 'px';
+  box.style.height = Math.max(100, (sh - 24) / s) + 'px';
+  box.style.left = '50%';
+  box.style.top = '12px';
+  box.style.transform = 'translateX(-50%) scale(' + s + ')';
+  $('#wread').textContent = W + ' px' + (s < 0.999 ? ' · ' + Math.round(s * 100) + '%' : '');
+}
+
+/* ---------- layout ---------- */
+const main = $('#main'), divider = $('#divider');
+const isNarrow = () => main.clientWidth < 640;
+function applySplit() {
+  const r = Math.min(0.8, Math.max(0.2, settings.split || 0.5));
+  $('#editorPane').style.flex = settings.view === 'split' ? '0 0 ' + (r * 100).toFixed(2) + '%' : '';
+}
+function applyLayout() {
+  const w = main.clientWidth, h = main.clientHeight;
+  const stack = w < 640 || (h > w && w < 1000);
+  main.classList.toggle('stack', stack);
+  divider.setAttribute('aria-orientation', stack ? 'horizontal' : 'vertical');
+  applySplit();
+  layoutFrame();
+}
+function setView(v) {
+  settings.view = v; saveSettings();
+  main.dataset.view = v;
+  $$('#viewSeg button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.view === v)));
+  applySplit();
+  requestAnimationFrame(() => { layoutFrame(); syncScroll(); });
+  updateBack();
+}
+{
+  let dragging = false;
+  const move = e => {
+    if (!dragging) return;
+    const r = main.getBoundingClientRect();
+    const stack = main.classList.contains('stack');
+    settings.split = stack ? (e.clientY - r.top) / r.height : (e.clientX - r.left) / r.width;
+    applySplit(); layoutFrame();
+  };
+  divider.addEventListener('pointerdown', e => {
+    e.preventDefault(); dragging = true; main.classList.add('dragging');
+    try { divider.setPointerCapture(e.pointerId); } catch (x) { /* ignore */ }
+  });
+  divider.addEventListener('pointermove', move);
+  const end = () => { if (!dragging) return; dragging = false; main.classList.remove('dragging'); saveSettings(); };
+  divider.addEventListener('pointerup', end);
+  divider.addEventListener('pointercancel', end);
+  divider.addEventListener('keydown', e => {
+    const d = { ArrowLeft: -0.05, ArrowUp: -0.05, ArrowRight: 0.05, ArrowDown: 0.05 }[e.key];
+    if (!d) return;
+    e.preventDefault();
+    settings.split = Math.min(0.8, Math.max(0.2, (settings.split || 0.5) + d));
+    applySplit(); layoutFrame(); saveSettings();
+  });
+}
+function fitViewport() {
+  const vv = window.visualViewport;
+  if (vv && vv.scale > 1.05) return;
+  const h = vv ? vv.height : window.innerHeight;
+  const top = vv ? vv.offsetTop : 0;
+  const r = document.documentElement;
+  r.style.setProperty('--app-h', Math.round(h) + 'px');
+  r.style.setProperty('--app-top', Math.round(top) + 'px');
+  r.classList.toggle('kb', window.innerHeight - h > 120);
+}
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', fitViewport);
+  window.visualViewport.addEventListener('scroll', fitViewport);
+}
+window.addEventListener('resize', fitViewport);
+if (window.ResizeObserver) {
+  new ResizeObserver(() => applyLayout()).observe(main);
+  new ResizeObserver(() => layoutFrame()).observe($('#stage'));
+} else window.addEventListener('resize', applyLayout);
+
+/* ---------- Telegram shell ---------- */
+function updateBack() {
+  if (!TG || !tgAt('6.1') || !TG.BackButton) return;
+  const need = !!closeCurrentSheet || !$('#findbar').hidden || (settings.view === 'preview' && isNarrow());
+  try { if (need) TG.BackButton.show(); else TG.BackButton.hide(); } catch (e) { /* ignore */ }
+}
+function onBack() {
+  if (closeCurrentSheet) { closeCurrentSheet(); return; }
+  if (!$('#findbar').hidden) { closeFind(); return; }
+  if (settings.view === 'preview') setView('code');
+}
+function applyTgTheme() {
+  const t = TG.themeParams || {};
+  const r = document.documentElement;
+  const dark = TG.colorScheme === 'dark';
+  r.setAttribute('data-theme', dark ? 'dark' : 'light');
+  const set = (k, v) => { if (v) r.style.setProperty(k, v); };
+  set('--surface', t.bg_color);
+  set('--bg', t.secondary_bg_color || t.bg_color);
+  set('--surface-2', t.secondary_bg_color);
+  set('--ink', t.text_color);
+  set('--muted', t.hint_color || t.subtitle_text_color);
+  set('--accent', t.button_color);
+  set('--accent-ink', t.button_text_color);
+  set('--accent-soft', hexToRgba(t.button_color, dark ? 0.22 : 0.13));
+  set('--sel', hexToRgba(t.button_color, 0.3));
+  set('--line', t.section_separator_color || hexToRgba(t.hint_color, 0.3));
+  set('--err', t.destructive_text_color);
+  try { if (tgAt('6.1')) { TG.setHeaderColor('bg_color'); if (t.secondary_bg_color) TG.setBackgroundColor(t.secondary_bg_color); } } catch (e) { /* ignore */ }
+}
+if (TG) {
+  document.documentElement.classList.add('tg');
+  applyTgTheme();
+  try { TG.onEvent('themeChanged', applyTgTheme); } catch (e) { /* ignore */ }
+  try { TG.onEvent('viewportChanged', fitViewport); } catch (e) { /* ignore */ }
+  try { TG.expand(); } catch (e) { /* ignore */ }
+  if (tgAt('7.7')) { try { TG.disableVerticalSwipes(); } catch (e) { /* ignore */ } }
+  if (tgAt('6.1') && TG.BackButton) { try { TG.BackButton.onClick(onBack); } catch (e) { /* ignore */ } }
+  try { TG.onEvent('deactivated', flushAll); } catch (e) { /* ignore */ }
+}
+
+/* ---------- sheets ---------- */
+let closeCurrentSheet = null;
+function openSheet(title, build) {
+  if (closeCurrentSheet) closeCurrentSheet();
+  const prevFocus = document.activeElement;
+  const body = el('div', { class: 'sheet-body' });
+  const closeBtn = el('button', { class: 'btn ghost icon', type: 'button', 'aria-label': 'Закрыть', text: '✕' });
+  const sheet = el('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-label': title },
+    el('div', { class: 'sheet-head' }, el('h2', { text: title }), closeBtn), body);
+  const scrim = el('div', { class: 'scrim' }, sheet);
+  const onKey = e => { if (e.key === 'Escape') close(); };
+  function close() {
+    if (!scrim.isConnected) return;
+    scrim.remove(); document.removeEventListener('keydown', onKey);
+    if (closeCurrentSheet === close) closeCurrentSheet = null;
+    if (prevFocus && prevFocus !== ta && prevFocus.focus) prevFocus.focus({ preventScroll: true });
+    updateBack();
+  }
+  closeBtn.addEventListener('click', close);
+  scrim.addEventListener('click', e => { if (e.target === scrim) close(); });
+  document.addEventListener('keydown', onKey);
+  build(body, close, sheet);
+  document.body.append(scrim);
+  closeCurrentSheet = close;
+  updateBack();
+  const first = $('input', sheet);
+  if (first && !('ontouchstart' in window)) first.focus();
+  return close;
+}
+function row(title, sub, onclick, opts) {
+  opts = opts || {};
+  return el('button', { class: 'row' + (opts.cls ? ' ' + opts.cls : ''), type: 'button', onclick, 'aria-pressed': opts.pressed == null ? null : String(opts.pressed) },
+    opts.icon ? el('span', { class: 'row-ico', 'aria-hidden': 'true', text: opts.icon }) : null,
+    el('span', { class: 'row-main' }, el('span', { class: 'row-title', text: title }), sub ? el('span', { class: 'row-sub', text: sub }) : null));
+}
+function storageNote() {
+  if (cloud.kind === 'tg' && cloud.write) return 'Код проектов хранится в облаке Telegram этого бота и виден только вам на всех ваших устройствах. Картинки остаются на этом устройстве.';
+  if (cloud.kind === 'claude' && cloud.write && cloud.canWrite) return 'Проекты и картинки сохраняются в вашем аккаунте Claude и видны только вам. Откройте эту страницу на другом устройстве, и они будут там.';
+  return 'Проекты сохраняются на этом устройстве. Чтобы не потерять работу, время от времени копируйте или скачивайте код.';
+}
+function canShareFile() {
+  try { const f = new File(['x'], 'a.html', { type: 'text/html' }); return !!(navigator.canShare && navigator.canShare({ files: [f] })); } catch (e) { return false; }
+}
+function exportLabel() {
+  if (downloads) return 'Скачать .html';
+  if (IN_ARTIFACT) return null;
+  if (canShareFile()) return 'Поделиться файлом .html';
+  if (!TG) return 'Скачать .html';
+  return null;
+}
+function showMenu() {
+  const p = cur();
+  const nImg = imgsOf(currentId).length;
+  const exp = exportLabel();
+  openSheet('Меню', (b, close) => {
+    const act = fn => () => { close(); fn(); };
+    const fileRow = el('label', { class: 'row', for: 'fileIn' },
+      el('span', { class: 'row-ico', 'aria-hidden': 'true', text: '↥' }),
+      el('span', { class: 'row-main' }, el('span', { class: 'row-title', text: 'Открыть файлы с устройства' }), el('span', { class: 'row-sub', text: '.html откроется новым проектом, .css и .js попадут во вкладки' })));
+    const fs = el('output', { text: settings.fontSize + ' px' });
+    const fontRow = el('div', { class: 'row static' },
+      el('span', { class: 'row-ico', 'aria-hidden': 'true', text: 'Aa' }),
+      el('span', { class: 'row-main' }, el('span', { class: 'row-title', text: 'Размер шрифта кода' })),
+      el('span', { class: 'fontctl' },
+        el('button', { class: 'btn sm', type: 'button', 'aria-label': 'Меньше', text: 'A−', onclick: () => { setFont(settings.fontSize - 1); fs.textContent = settings.fontSize + ' px'; } }),
+        fs,
+        el('button', { class: 'btn sm', type: 'button', 'aria-label': 'Больше', text: 'A+', onclick: () => { setFont(settings.fontSize + 1); fs.textContent = settings.fontSize + ' px'; } })));
+    b.append(
+      el('div', { class: 'group-title', text: 'Проект «' + p.name + '»' }),
+      row('Все проекты', Object.keys(projects).length + ' ' + plural(Object.keys(projects).length, 'проект', 'проекта', 'проектов'), act(showProjects), { icon: '☰' }),
+      row('Новый проект', 'Пустой или из шаблона', act(showNew), { icon: '+' }),
+      row('Картинки', nImg ? nImg + ' ' + plural(nImg, 'файл', 'файла', 'файлов') + ' в проекте' : 'Загрузите фото и вставьте по имени файла', act(showImages), { icon: '▣' }),
+      fileRow,
+      el('div', { class: 'group-title', text: 'Код в ' + FILES[tab] }),
+      row('Вставить готовый кусок', 'Теги, свойства CSS, конструкции JS', act(showSnippets), { icon: '＋' }),
+      row('Найти и заменить', 'Ctrl/⌘ + F', act(openFind), { icon: '⌕' }),
+      row('Выровнять отступы', 'Расставит вложенность по 2 пробела', act(formatCurrent), { icon: '⇤' }),
+      el('div', { class: 'group-title', text: 'Экспорт' }),
+      row('Скопировать ' + FILES[tab], 'Текст открытой вкладки', act(() => copyText(cur()[tab], FILES[tab] + ' скопирован')), { icon: '⧉' }),
+      row('Скопировать страницу целиком', 'HTML, CSS и JS одним файлом', act(() => copyText(compose(cur(), true), 'Страница скопирована')), { icon: '⧉' }),
+      exp ? row(exp, 'Готовый файл со стилями, скриптом и картинками', act(exportFile), { icon: '↓' }) : null,
+      el('div', { class: 'group-title', text: 'Настройки' }),
+      fontRow,
+      row('Показать подсказку', 'Сокращения и горячие клавиши', act(() => { settings.tip = true; saveSettings(); $('#tip').hidden = false; applyLayout(); }), { icon: '?' }),
+      row('Переименовать проект', p.name, act(showRename), { icon: '✎' }),
+      row('Удалить проект', 'Вместе с его картинками', act(showDelete), { icon: '✕', cls: 'danger' }),
+      el('p', { class: 'sheet-note', text: storageNote() })
+    );
+  });
+}
+function setFont(n) {
+  settings.fontSize = Math.min(26, Math.max(11, n)); saveSettings();
+  document.documentElement.style.setProperty('--code-size', settings.fontSize + 'px');
+  requestAnimationFrame(syncScroll);
+}
+function showSnippets() {
+  const s = ta.selectionStart, e = ta.selectionEnd;
+  openSheet('Вставить в ' + FILES[tab], (b, close) => {
+    for (const [group, items] of SNIP[tab]) {
+      b.append(el('div', { class: 'group-title', text: group }));
+      const chips = el('div', { class: 'chips' });
+      for (const [label, code] of items) {
+        chips.append(el('button', { class: 'chip', type: 'button', text: label, title: code.replace(C, ''), onclick: () => { close(); haptic('tick'); insertSnippet(code, s, e); } }));
+      }
+      b.append(chips);
+    }
+    if (tab === 'html') b.append(el('p', { class: 'sheet-note', text: 'Быстрее руками: наберите div.card, ul>li*3 или ! и нажмите ⇥.' }));
+  });
+}
+function showProjects() {
+  openSheet('Проекты', (b, close) => {
+    b.append(el('div', { class: 'sheet-actions' },
+      el('button', { class: 'btn btn-primary', type: 'button', text: '+ Новый проект', onclick: () => { close(); showNew(); } }),
+      el('label', { class: 'btn', for: 'fileIn', text: 'Открыть файлы…' })));
+    for (const p of Object.values(projects).sort(byRecent)) {
+      const sub = p.updatedAt ? 'изменён ' + dateFmt.format(p.updatedAt) : 'пример, ещё не менялся';
+      b.append(row(p.name, sub, () => { close(); switchProject(p.id); }, { cls: p.id === currentId ? 'current' : '', icon: p.name.trim().charAt(0).toUpperCase() || '·' }));
+    }
+  });
+}
+function showNew() {
+  let chosen = 'blank';
+  openSheet('Новый проект', (b, close, sheet) => {
+    const input = el('input', { id: 'newName', type: 'text', value: '', placeholder: 'Например, Мой первый сайт', autocomplete: 'off', enterkeyhint: 'done' });
+    b.append(el('div', { class: 'field' }, el('label', { for: 'newName', text: 'Название' }), input));
+    b.append(el('div', { class: 'group-title', text: 'Шаблон' }));
+    const rows = TPL_ORDER.map(k => {
+      const r = row(TPL[k].name, TPL[k].desc, () => { chosen = k; rows.forEach(x => x.setAttribute('aria-pressed', String(x === r))); }, { pressed: k === chosen });
+      return r;
+    });
+    rows.forEach(r => b.append(r));
+    const create = () => {
+      const id = newId(), ts = Date.now();
+      const name = input.value.trim() || (chosen === 'blank' ? 'Новый проект' : TPL[chosen].name);
+      projects[id] = fromTemplate(chosen, id, name.slice(0, 80), ts);
+      close(); switchProject(id); markDirty(id);
+      haptic('success');
+      toast('Проект «' + name + '» создан');
+    };
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); create(); } });
+    sheet.append(el('div', { class: 'sheet-foot' },
+      el('button', { class: 'btn', type: 'button', text: 'Отмена', onclick: close }),
+      el('button', { class: 'btn btn-primary', type: 'button', text: 'Создать', onclick: create })));
+  });
+}
+function showRename() {
+  const p = cur();
+  openSheet('Переименовать проект', (b, close, sheet) => {
+    const input = el('input', { id: 'renameIn', type: 'text', value: p.name, autocomplete: 'off', enterkeyhint: 'done' });
+    b.append(el('div', { class: 'field' }, el('label', { for: 'renameIn', text: 'Название' }), input));
+    const save = () => {
+      const name = input.value.trim();
+      if (!name) { input.focus(); return; }
+      p.name = name.slice(0, 80); p.updatedAt = Date.now();
+      markDirty(p.id); updateHeader(); close();
+    };
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); save(); } });
+    sheet.append(el('div', { class: 'sheet-foot' },
+      el('button', { class: 'btn', type: 'button', text: 'Отмена', onclick: close }),
+      el('button', { class: 'btn btn-primary', type: 'button', text: 'Сохранить', onclick: save })));
+    requestAnimationFrame(() => { input.focus(); input.select(); });
+  });
+}
+function showDelete() {
+  const p = cur();
+  const n = imgsOf(p.id).length;
+  openSheet('Удалить проект?', (b, close, sheet) => {
+    b.append(el('p', { class: 'sheet-note', text: '«' + p.name + '» и ' + (n ? n + ' ' + plural(n, 'картинка', 'картинки', 'картинок') : 'все его файлы') + ' будут удалены на всех устройствах. Отменить это нельзя.' }));
+    sheet.append(el('div', { class: 'sheet-foot' },
+      el('button', { class: 'btn', type: 'button', text: 'Отмена', onclick: close }),
+      el('button', { class: 'btn danger', type: 'button', text: 'Удалить', onclick: () => { close(); deleteProject(p.id); } })));
+  });
+}
+function deleteProject(id) {
+  const ts = Date.now();
+  const name = projects[id] ? projects[id].name : '';
+  delete projects[id];
+  deleted[id] = ts;
+  for (const im of imgsOf(id)) { delete images[im.id]; deleted[im.id] = ts; delImgLocal(im.id); cloudPut(im.id); }
+  store.set('hp.deleted', deleted);
+  cloudPut(id);
+  ensureProject();
+  saveLocal();
+  switchProject(currentId, true);
+  toast('«' + name + '» удалён');
+}
+function showImages() {
+  openSheet('Картинки проекта', b => {
+    b.append(el('p', { class: 'sheet-note' },
+      'Загрузите файл и напишите его имя в коде: ', el('code', { text: '<img src="photo.jpg">' }), ' или ', el('code', { text: 'url("photo.jpg")' }),
+      '. Папка в пути не важна: img/photo.jpg тоже найдётся. Большие фото уменьшаются до ~170 КБ.' +
+      (cloud.kind === 'tg' ? ' В Telegram картинки хранятся только на этом устройстве.' : '')));
+    b.append(el('div', { class: 'sheet-actions' }, el('label', { class: 'btn btn-primary', for: 'imgIn', text: '+ Добавить картинки' })));
+    const list = imgsOf(currentId);
+    if (!list.length) { b.append(el('p', { class: 'empty', text: 'В этом проекте пока нет картинок.' })); return; }
+    const grid = el('div', { class: 'imgs' });
+    for (const im of list) {
+      const kb = Math.round(im.dataUrl.length * 0.75 / 1024);
+      grid.append(el('div', { class: 'img-card' },
+        el('img', { src: im.dataUrl, alt: im.name }),
+        el('div', { class: 'img-meta' },
+          el('span', { class: 'img-name', text: im.name }),
+          el('span', { class: 'img-size', text: kb + ' КБ' }),
+          el('div', { class: 'img-btns' },
+            el('button', { class: 'btn sm', type: 'button', text: 'Вставить', onclick: () => insertImage(im) }),
+            el('button', { class: 'btn sm ghost', type: 'button', 'aria-label': 'Удалить ' + im.name, text: 'Удалить', onclick: () => removeImage(im.id) })))));
+    }
+    b.append(grid);
+  });
+}
+function insertImage(im) {
+  if (closeCurrentSheet) closeCurrentSheet();
+  if (tab === 'js') setTab('html');
+  const s = ta.selectionStart, e = ta.selectionEnd;
+  if (tab === 'css') insertAt('url("' + im.name + '")', s, e);
+  else insertAt('<img src="' + im.name + '" alt="">', s, e);
+}
+function removeImage(id) {
+  if (!images[id]) return;
+  delete images[id]; deleted[id] = Date.now();
+  delImgLocal(id); store.set('hp.deleted', deleted);
+  cloudPut(id);
+  schedulePreview();
+  showImages();
+}
+function readDataURL(file) {
+  return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.onerror = () => rej(new Error('файл не читается')); r.readAsDataURL(file); });
+}
+function loadImg(src) {
+  return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error('формат не поддерживается')); i.src = src; });
+}
+async function processImage(file) {
+  const MAX = 230000;
+  const d0 = await readDataURL(file);
+  if (d0.length <= MAX && /^data:image\//.test(d0)) return d0;
+  if (/svg/i.test(file.type) || /\.svg$/i.test(file.name)) throw new Error('SVG больше 170 КБ');
+  const img = await loadImg(d0);
+  const keepAlpha = /png|gif|webp/i.test(file.type);
+  let side = 1600, q = 0.85;
+  for (let i = 0; i < 9; i++) {
+    const k = Math.min(1, side / Math.max(img.naturalWidth, img.naturalHeight));
+    const w = Math.max(1, Math.round(img.naturalWidth * k)), h = Math.max(1, Math.round(img.naturalHeight * k));
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    const ctx = c.getContext('2d');
+    let d;
+    if (keepAlpha) {
+      ctx.drawImage(img, 0, 0, w, h);
+      d = c.toDataURL('image/webp', q);
+      if (d.indexOf('data:image/webp') !== 0) d = c.toDataURL('image/png');
+    } else {
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h); ctx.drawImage(img, 0, 0, w, h);
+      d = c.toDataURL('image/jpeg', q);
+    }
+    if (d.length <= MAX) return d;
+    side *= 0.78; q = Math.max(0.6, q - 0.05);
+  }
+  throw new Error('не получилось уменьшить');
+}
+async function addImage(file, pid) {
+  let dataUrl;
+  try { dataUrl = await processImage(file); }
+  catch (err) { toast('«' + file.name + '»: ' + err.message); return null; }
+  let name = (file.name || 'image.jpg').trim().replace(/\s+/g, '-');
+  if (!/\.[a-z0-9]{2,5}$/i.test(name)) name += '.jpg';
+  const taken = new Set(imgsOf(pid).map(i => i.name.toLowerCase()));
+  if (taken.has(name.toLowerCase())) {
+    const dot = name.lastIndexOf('.');
+    let n = 2;
+    while (taken.has((name.slice(0, dot) + '-' + n + name.slice(dot)).toLowerCase())) n++;
+    name = name.slice(0, dot) + '-' + n + name.slice(dot);
+  }
+  const im = { id: 'img-' + newId(), projectId: pid, name, dataUrl, updatedAt: Date.now() };
+  images[im.id] = im;
+  const okLocal = saveImgLocal(im);
+  if (cloud.kind === 'claude' && cloud.write && cloud.canWrite) cloudPut(im.id);
+  else if (!okLocal) toast('Не хватило места: «' + name + '» пропадёт после перезапуска');
+  return im;
+}
+$('#imgIn').addEventListener('change', async e => {
+  const files = Array.from(e.target.files || []); e.target.value = '';
+  if (!files.length) return;
+  toast('Обрабатываю ' + files.length + ' ' + plural(files.length, 'картинку', 'картинки', 'картинок') + '…');
+  let added = 0;
+  for (const f of files) if (await addImage(f, currentId)) added++;
+  if (added) { toast('Добавлено: ' + added); haptic('success'); schedulePreview(); }
+  showImages();
+});
+$('#fileIn').addEventListener('change', async e => {
+  const files = Array.from(e.target.files || []); e.target.value = '';
+  if (!files.length) return;
+  if (closeCurrentSheet) closeCurrentSheet();
+  let target = cur();
+  const htmlFile = files.find(f => /\.html?$/i.test(f.name));
+  if (htmlFile) {
+    const id = newId(), ts = Date.now();
+    projects[id] = { id, name: htmlFile.name.replace(/\.html?$/i, '').slice(0, 80) || 'Без названия', html: await htmlFile.text(), css: '', js: '', createdAt: ts, updatedAt: ts };
+    target = projects[id];
+  }
+  let nImg = 0;
+  for (const f of files) {
+    if (f === htmlFile) continue;
+    if (/\.css$/i.test(f.name)) target.css = await f.text();
+    else if (/\.(m?js)$/i.test(f.name)) target.js = await f.text();
+    else if (/^image\//.test(f.type) || /\.(png|jpe?g|gif|webp|svg|avif)$/i.test(f.name)) { if (await addImage(f, target.id)) nImg++; }
+  }
+  target.updatedAt = Date.now();
+  switchProject(target.id, true); markDirty(target.id);
+  toast(htmlFile ? 'Открыт «' + target.name + '»' : 'Файлы добавлены' + (nImg ? ', картинок: ' + nImg : ''));
+});
+
+async function copyText(text, okMsg) {
+  try { await navigator.clipboard.writeText(text); toast(okMsg); haptic('success'); }
+  catch (e) {
+    const t = el('textarea', { class: 'vh', 'aria-hidden': 'true' }); t.value = text; document.body.append(t); t.select();
+    let ok = false; try { ok = document.execCommand('copy'); } catch (x) { ok = false; }
+    t.remove();
+    toast(ok ? okMsg : 'Скопировать не вышло: выделите код и скопируйте вручную');
+  }
+}
+async function exportFile() {
+  const p = cur();
+  const name = (p.name.replace(/[\\/:*?"<>|]+/g, '-').trim() || 'index') + '.html';
+  const html = compose(p, true);
+  if (downloads) {
+    try {
+      const r = await downloads.save({ filename: name, data: html });
+      if (r && r.status === 'saved') toast('Файл сохранён');
+    } catch (e) {
+      if (e && e.code === 'declined') return;
+      toast('Скачать не получилось' + (e && e.code ? ' (' + e.code + ')' : ''));
+    }
+    return;
+  }
+  if (canShareFile()) {
+    try { await navigator.share({ files: [new File([html], name, { type: 'text/html' })], title: p.name }); return; }
+    catch (e) { if (e && e.name === 'AbortError') return; }
+  }
+  if (!TG) {
+    const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+    const a = el('a', { href: url, download: name });
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    toast('Файл скачивается');
+    return;
+  }
+  copyText(html, 'Страница скопирована целиком');
+}
+
+/* ---------- wiring ---------- */
+function updateHeader() { $('#projName').textContent = cur() ? cur().name : 'Проект'; }
+function switchProject(id, force) {
+  if (!projects[id]) return;
+  if (id === currentId && !force) { loadEditor(); return; }
+  flushAll();
+  if (id !== currentId) rememberView();
+  currentId = id; store.set('hp.current', id);
+  lastScrollY = 0;
+  updateHeader(); loadEditor(); runPreview();
+}
+$$('.tabs [role="tab"]').forEach(b => b.addEventListener('click', () => setTab(b.dataset.tab)));
+$$('#viewSeg button').forEach(b => b.addEventListener('click', () => { haptic('tick'); setView(b.dataset.view); }));
+$$('#devSeg button').forEach(b => b.addEventListener('click', () => { settings.device = b.dataset.w; saveSettings(); layoutFrame(); }));
+$('#runBtn').addEventListener('click', () => {
+  flushAll(); runPreview();
+  if (isNarrow() && settings.view === 'code') setView('preview');
+});
+$('#menuBtn').addEventListener('click', showMenu);
+$('#projBtn').addEventListener('click', showProjects);
+$('#consoleBtn').addEventListener('click', () => setConsole($('#console').hidden));
+$('#closeLog').addEventListener('click', () => setConsole(false));
+$('#clearLog').addEventListener('click', clearLogs);
+$('#autorun').addEventListener('change', e => { settings.autorun = e.target.checked; saveSettings(); if (settings.autorun) runPreview(); });
+$('#tipClose').addEventListener('click', () => { settings.tip = false; saveSettings(); $('#tip').hidden = true; applyLayout(); });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushAll(); });
+window.addEventListener('pagehide', flushAll);
+
+/* ---------- start ---------- */
+fitViewport();
+ensureProject();
+document.documentElement.style.setProperty('--code-size', settings.fontSize + 'px');
+$('#autorun').checked = !!settings.autorun;
+$('#tip').hidden = !settings.tip;
+setView(settings.view || (isNarrow() ? 'code' : 'split'));
+setConsole(!!settings.consoleOpen);
+updateHeader();
+loadEditor();
+applyLayout();
+clearLogs();
+runPreview();
+refreshSync();
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { renderHL(); });
+if (TG) { try { TG.ready(); } catch (e) { /* ignore */ } }
+setTimeout(connect, 0);
+})();
+</script>
+</body>
+</html>
